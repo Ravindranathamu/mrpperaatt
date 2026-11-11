@@ -16,7 +16,11 @@ No employee app to install. No monthly fee if you stay within the free tiers of 
 - **Printed static QR code** — the same poster works every day; nothing to regenerate each morning.
 - **Google sign-in** — employees are identified by their verified Google email.
 - **One-tap check-in/out** — the app decides which action is next automatically.
-- **GPS geofence** — configurable radius around the office; check-in from home is rejected.
+- **GPS geofence** — configurable radius around the office; check-in and employee check-out
+  attempts from outside the radius are rejected.
+- **Pending checkout approval** — if an open shift is checked out from outside the geofence, the
+  shift closes at its department end time and is marked **pending**. The employee cannot check in
+  again until an admin approves the saved time or corrects it.
 - **Admin dashboard** — today's live board, employee management, holidays, date-range reports.
 - **Department shifts** — each department can have its own check-in start, finish time, and grace
   period; lateness follows the employee's department.
@@ -28,12 +32,12 @@ No employee app to install. No monthly fee if you stay within the free tiers of 
 - **Branch-prefixed downloads** — files are named like
   `Peradeniya_attendance_2026-11-01_to_2026-11-11.csv` using `BRANCH_NAME`.
 - **Monthly attendance sheet** — a payroll-friendly CSV with totals next to each employee name and
-  one column per day. A matching **Excel** download highlights every date cell that includes Night
-  Body Wash hours.
+  one column per day. A matching **Excel** download highlights Night Body Wash date cells in yellow
+  and pending-approval cells in red.
 - **Raw data CSV** — one row per shift, including department shift, distance, late status, Night
-  Body Wash hours, and overtime hours.
+  Body Wash hours, overtime hours, and approval status.
 - **Timezone-aware** — all dates, times, late calculations, and reports use your office timezone.
-- **Free production stack** — Render for the app and Neon for the database, both HTTPS.
+- **Free production stack** — Back4App Containers for the app and Neon for the database, both HTTPS.
 - **Secure by default** — server-side Google token verification, signed HttpOnly sessions,
   rate limits, origin checks, protected admin exports, and CSV formula-injection protection.
 
@@ -60,8 +64,10 @@ No employee app to install. No monthly fee if you stay within the free tiers of 
 2. On first use, the employee signs in with Google. The server verifies the Google ID token
    itself, so a forged browser request cannot fake an email.
 3. Each tap sends latitude, longitude, and GPS accuracy to the server.
-4. The server calculates the distance to `OFFICE_LAT` / `OFFICE_LNG`. Outside the radius, the
-   punch is rejected. The server does not trust a "yes" from the browser.
+4. The server calculates the distance to `OFFICE_LAT` / `OFFICE_LNG`. Outside the radius, a
+   check-in is rejected. If an open shift is checked out outside the radius, the shift is closed at
+   its saved department end time and marked pending until an admin approves it. The next check-in
+   stays blocked in the meantime. The server does not trust a "yes" from the browser.
 5. Check-ins and check-outs are stored in UTC; reports are grouped by your office timezone.
 6. An eligible day worker who continues into Night Body Wash does not check out at the end of the
    day shift. The same open record runs until the final check-out, and time after the day shift is
@@ -452,10 +458,14 @@ then regenerate the QR poster with the new URL.
 - [ ] Location permission is requested.
 - [ ] Check-in succeeds near the office and fails away from it.
 - [ ] Check-out succeeds near the office and fails away from it.
-- [ ] Check-out works.
+- [ ] Checking out away from the office closes the shift at its department shift end and shows
+      **Pending approval** in Reports.
+- [ ] The employee cannot check in again until the admin approves the pending row.
+- [ ] The admin can approve the saved time, and can also approve after editing the time.
 - [ ] The record appears in the admin **Today** board.
 - [ ] The monthly CSV downloads and opens in Excel.
-- [ ] The Excel download opens and Night Body Wash date cells are highlighted.
+- [ ] The Excel download opens with Night Body Wash cells highlighted yellow and pending cells red.
+- [ ] The raw CSV includes the **Approval** column and no email addresses.
 - [ ] The QR link points to the real HTTPS URL, not `localhost`.
 
 ### 4.7 Render free-plan behavior
@@ -642,7 +652,8 @@ Open `https://YOUR-SERVICE.onrender.com/admin`.
 4. Click **Load report** to preview records and totals.
 5. Click **Download monthly sheet (CSV)** for the payroll-style matrix.
 6. Click **Download monthly sheet (Excel, NB highlighted)** for the same matrix with Night Body
-   Wash date cells filled in yellow.
+   Wash date cells filled in yellow. Pending-approval cells are red (Night Body Wash cells keep
+   their yellow fill and get red text/borders).
 7. Click **Download raw data (CSV)** for one row per shift.
 
 Monthly sheet layout:
@@ -658,16 +669,22 @@ Monthly sheet layout:
 - `P 07:00–18:00 (11h 00m) · OT 2h 00m` = present from 07:00 to 18:00 in a Workshop/Paint
   department, with 2 hours after the 16:00 finish labelled overtime (`OT`).
 - `L ...` = late check-in (after that employee's department shift start + grace).
+- `PENDING ...` = the shift was auto-closed after an out-of-geofence check-out attempt and is
+  waiting for an admin to approve or correct the saved check-out. Its hours still count in totals
+  until an admin decides.
 - `A` = absent on a working day before today.
 - `H` = holiday.
 - Blank = weekend, future date, or today before a record exists.
 - Totals: Present days, Late days, Absent days, Open shifts, Total hours, Night Body Wash hours,
   and Overtime hours (all decimal). NB and OT are included in Total hours, not added on top.
-- The **Attendance records** preview has separate **Night Body Wash** and **Overtime** columns, and
-  the raw CSV includes both next to the total.
+- The **Attendance records** preview has separate **Night Body Wash** and **Overtime** columns, a
+  **Pending approval** status badge, and an **Approve** action. The raw CSV includes an **Approval**
+  column next to Status.
 - In the **Excel** download, any date cell with Night Body Wash hours is filled pale yellow with
   bold brown text. This includes Night Body Wash workers and day workers who stayed into the
-  evening. CSV cannot store cell colours, so use the Excel download when the highlight is needed.
+  evening. Pending cells are red; when a pending cell also has NB hours, the yellow fill stays and
+  the text/border turns red. CSV cannot store cell colours, so use the Excel download when the
+  highlight is needed.
 - Downloaded filenames start with `BRANCH_NAME`. For example, Peradeniya’s monthly sheet is
   `Peradeniya_attendance_2026-11-01_to_2026-11-11.csv`, the highlighted version is
   `Peradeniya_attendance_2026-11-01_to_2026-11-11.xlsx`, and the raw export is
@@ -699,6 +716,24 @@ If someone forgets to check out, the shift stays open and appears as **Open** in
 the row, click **Fix checkout**, and enter the correct local check-out time. The correction is
 saved with no GPS distance (because it was entered by the admin). A shift cannot be fixed to a
 time before check-in, in the future, or longer than 24 hours.
+
+### Approving an out-of-geofence check-out
+
+If an employee taps **Check out** while outside the geofence, the server rejects the tap and,
+if they still have an open shift, closes that shift at the department shift end time saved when
+they checked in. The record is marked **Pending approval**; it does not stay open. Until an admin
+approves it, the employee's next check-in is blocked.
+
+1. Open **Reports** and load the date range that includes the shift.
+2. Find the row with the **Pending approval** badge and click **Approve**.
+3. The dialog is prefilled with the saved shift-end time. Keep it, or change it to the correct
+   office time.
+4. Click **Approve check-out**. The badge disappears, the record becomes final, and the employee
+   can check in again.
+
+Pending hours are included in report totals while the approval is outstanding, so payroll never
+silently drops a shift. The Excel download shows pending cells in red so they are easy to spot
+before finalising payroll.
 
 ### Monthly/occasional checks
 
@@ -865,6 +900,9 @@ Recommended production settings:
 | "Attendance is already complete for today" | A check-out was already recorded. A day-to-night worker must not check out at 4:00 PM; if they already did, the closed shift cannot be reopened in the dashboard. |
 | "Shift complete" but the time is wrong | Admin: Reports → find the record → **Fix checkout** (only works for open shifts; closed shifts cannot be reopened). |
 | Open shift from a previous day | The employee can check out within `OPEN_SHIFT_HOURS`; otherwise admin fixes it in Reports. |
+| "Waiting for admin approval" blocks check-in | An out-of-geofence check-out auto-closed the shift. Admin: Reports → **Approve**, keeping or editing the saved time. |
+| Check-out was rejected but the shift is closed | Expected: the shift closes at its department shift end and waits for approval instead of staying open. |
+| Pending row is red in Excel | It is still awaiting approval. Approve it in Reports, then download again for payroll. |
 | Admin password rejected | Check `ADMIN_PASSWORD` in the running environment. Changing `.env` requires a restart. Rate limit after 10 failures: wait 15 minutes. |
 | 429 "Too many attempts" | Rate limiting. Wait, then retry. |
 | Render page takes ~1 minute to load | Free service was asleep. Wait for it to wake; consider a paid instance for a busy office. |

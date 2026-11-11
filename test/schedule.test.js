@@ -8,12 +8,14 @@ const {
   createDepartmentMap,
   scheduleForEmployee,
   scheduleForRecord,
+  scheduledEndFor,
 } = require('../src/schedule');
 
 const config = {
   workStart: '09:00',
   workEnd: '17:00',
   graceMinutes: 10,
+  timezone: 'Asia/Colombo',
 };
 
 test('department schedules override the default shift', () => {
@@ -69,4 +71,23 @@ test('attendance snapshots win over the current department schedule', () => {
   });
 
   assert.equal(scheduleForRecord({}, fallback, config).label, '08:00–17:00');
+});
+
+test('scheduled shift end uses the saved snapshot and handles overnight work', () => {
+  const day = scheduledEndFor(
+    { work_date: '2026-11-10', shift_start: '07:00', shift_end: '16:00' },
+    null,
+    config,
+  );
+  assert.equal(day.date, '2026-11-10');
+  assert.equal(day.schedule.label, '07:00–16:00');
+  assert.equal(day.at.toISOString(), '2026-11-10T10:30:00.000Z'); // 16:00 Colombo
+
+  const overnight = scheduledEndFor(
+    { work_date: '2026-11-10', shift_start: '16:00', shift_end: '01:00' },
+    null,
+    config,
+  );
+  assert.equal(overnight.date, '2026-11-11');
+  assert.equal(overnight.at.toISOString(), '2026-11-10T19:30:00.000Z'); // 01:00 Colombo next day
 });

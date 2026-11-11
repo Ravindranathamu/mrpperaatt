@@ -191,7 +191,7 @@ test('raw rows and CSV expose check-in/out details', () => {
   assert.equal(csv.charCodeAt(0), 0xfeff);
   assert.match(csv, /Alice Perera/);
   assert.match(csv, /Hours,Night Body Wash hours,Overtime hours,Status/);
-  assert.match(csv, /8.50,,0.50,Present/);
+  assert.match(csv, /8.50,,0.50,Present,Approved/);
   assert.doesNotMatch(csv, /Email/);
   assert.doesNotMatch(csv, /alice@example\.com/);
 });
@@ -543,6 +543,145 @@ test('historical shift snapshots override a later department change', () => {
   });
   assert.equal(matrix.rows[0].shift, '09:00–18:00');
   assert.match(matrix.rows[0].cells[0], /^L 07:36–16:00 /);
+});
+
+test('pending approval records are marked in the matrix and raw CSV', () => {
+  const employees = [
+    {
+      id: 1,
+      name: 'Pending Worker',
+      email: 'pending@example.com',
+      department: 'Workshop 1',
+      active: true,
+    },
+  ];
+  const departments = [
+    { id: 1, name: 'Workshop 1', work_start: '07:00', work_end: '16:00', grace_minutes: 10, night_body_wash: false },
+  ];
+  const records = [
+    record({
+      id: 1,
+      employee_id: 1,
+      employee_name: 'Pending Worker',
+      employee_department: 'Workshop 1',
+      work_date: '2026-11-02',
+      check_in: '2026-11-02T01:30:00.000Z', // 07:00 Colombo
+      check_out: '2026-11-02T10:30:00.000Z', // 16:00 Colombo
+      approval_status: 'pending',
+      auto_closed: true,
+    }),
+  ];
+
+  const rows = buildRawRows(records, config, departments);
+  assert.equal(rows[0].pending, true);
+  assert.equal(rows[0].autoClosed, true);
+  assert.equal(rows[0].status, 'Pending approval');
+  const csv = rawRowsToCsv(rows);
+  assert.match(csv, /Status,Approval/);
+  assert.match(csv, /Pending approval,Pending approval/);
+
+  const matrix = buildMatrix({
+    employees,
+    records,
+    holidays: [],
+    departments,
+    from: '2026-11-02',
+    to: '2026-11-02',
+    today: '2026-11-10',
+    config,
+  });
+  const row = matrix.rows[0];
+  assert.equal(row.cells[0], 'PENDING 07:00–16:00 (9h 00m)');
+  assert.deepEqual(row.pendingFlags, [true]);
+  assert.equal(row.pendingApprovals, 1);
+  // Pending hours still count toward payroll totals until an admin decides.
+  assert.equal(row.presentDays, 1);
+  assert.equal(row.totalHours, '9.00');
+});
+
+test('Excel marks pending cells red while keeping Night Body Wash yellow', async () => {
+  const ExcelJS = require('exceljs');
+  const departments = [
+    {
+      id: 1,
+      name: 'Service',
+      work_start: '07:00',
+      work_end: '16:00',
+      grace_minutes: 10,
+      night_body_wash: true,
+    },
+    {
+      id: 2,
+      name: 'Night Body Wash',
+      work_start: '16:00',
+      work_end: '21:00',
+      grace_minutes: 10,
+      night_body_wash: true,
+    },
+    {
+      id: 3,
+      name: 'Workshop 1',
+      work_start: '07:00',
+      work_end: '16:00',
+      grace_minutes: 10,
+      night_body_wash: false,
+    },
+  ];
+  const employees = [
+    { id: 1, name: 'Alpha Pending', email: 'alpha@example.com', department: 'Service', active: true },
+    { id: 2, name: 'Beta Pending', email: 'beta@example.com', department: 'Workshop 1', active: true },
+  ];
+  const records = [
+    record({
+      id: 1,
+      employee_id: 1,
+      employee_department: 'Service',
+      work_date: '2026-11-02',
+      check_in: '2026-11-02T01:30:00.000Z', // 07:00 Colombo
+      check_out: '2026-11-02T15:30:00.000Z', // 21:00 Colombo
+      approval_status: 'pending',
+      auto_closed: true,
+    }),
+    record({
+      id: 2,
+      employee_id: 2,
+      employee_department: 'Workshop 1',
+      work_date: '2026-11-02',
+      check_in: '2026-11-02T01:30:00.000Z',
+      check_out: '2026-11-02T10:30:00.000Z', // 16:00 Colombo
+      approval_status: 'pending',
+      auto_closed: true,
+    }),
+  ];
+
+  const matrix = buildMatrix({
+    employees,
+    records,
+    holidays: [],
+    departments,
+    from: '2026-11-02',
+    to: '2026-11-02',
+    today: '2026-11-10',
+    config,
+  });
+  assert.match(matrix.rows[0].cells[0], /^PENDING 07:00–21:00 .* NB 5h 00m/);
+  assert.deepEqual(matrix.rows[0].pendingFlags, [true]);
+  assert.deepEqual(matrix.rows[1].pendingFlags, [true]);
+
+  const buffer = await matrixToXlsx(matrix);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.getWorksheet('Attendance');
+
+  const nightPending = sheet.getRow(2).getCell(11);
+  assert.equal(nightPending.fill.fgColor.argb, 'FFFFF2CC'); // NB yellow preserved
+  assert.equal(nightPending.font.color.argb, 'FFB91C1C'); // pending red text
+  assert.equal(nightPending.border.top.color.argb, 'FFDC2626');
+
+  const plainPending = sheet.getRow(3).getCell(11);
+  assert.equal(plainPending.fill.fgColor.argb, 'FFFFE4E6'); // pending red fill
+  assert.equal(plainPending.font.color.argb, 'FFB91C1C');
+  assert.equal(plainPending.border.left.color.argb, 'FFDC2626');
 });
 
 test('Excel workbook highlights Night Body Wash date cells and omits Email', async () => {

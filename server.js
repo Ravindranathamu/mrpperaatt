@@ -19,6 +19,9 @@ const {
   formatDateLabel,
   formatDuration,
   minutesBetween,
+  minutesOfDay,
+  addDays,
+  timeInZone,
 } = require('./src/time');
 const {
   formatRecord,
@@ -34,6 +37,8 @@ const {
 const {
   createDepartmentMap,
   scheduleForEmployee,
+  scheduleForRecord,
+  scheduledEndFor,
 } = require('./src/schedule');
 const {
   httpError,
@@ -278,9 +283,20 @@ async function getOpenShift(employeeId, now, executor = db, lock = false) {
   return query.first();
 }
 
+async function getPendingApproval(employeeId, executor = db, lock = false) {
+  let query = executor('attendance')
+    .where({ employee_id: employeeId, approval_status: 'pending' })
+    .orderBy('work_date', 'desc');
+  if (isPostgres && lock) query = query.forUpdate();
+  return query.first();
+}
+
 async function attendanceState(employee, now = new Date()) {
   const today = todayISO(config.timezone, now);
-  const open = await getOpenShift(employee.id, now);
+  const [open, pending] = await Promise.all([
+    getOpenShift(employee.id, now),
+    getPendingApproval(employee.id),
+  ]);
   let record = open;
   let action;
 
@@ -301,12 +317,24 @@ async function attendanceState(employee, now = new Date()) {
     departmentNamesForEmployees(),
   ]);
   const schedule = scheduleForEmployee(employee, departmentMap, config);
+  const pendingRecord = pending ? formatRecord(pending, config, { schedule }) : null;
 
   return {
     action,
     today,
     record: record ? formatRecord(record, config, { schedule }) : null,
     openShift: Boolean(open) && open.work_date !== today,
+    pendingApproval: pendingRecord
+      ? {
+          id: pendingRecord.id,
+          workDate: pendingRecord.workDate,
+          checkIn: pendingRecord.checkIn,
+          checkOut: pendingRecord.checkOut,
+          hours: pendingRecord.hours,
+          pending: true,
+          autoClosed: pendingRecord.autoClosed,
+        }
+      : null,
     workday,
     holiday: holiday ? holiday.name : null,
     schedule: publicSchedule(schedule),
@@ -524,27 +552,81 @@ app.post('/api/attendance/punch', punchLimiter, requireEmployee, async (req, res
   const { latitude, longitude, accuracy } = parseCoordinates(req.body);
   const distance = distanceMeters(latitude, longitude, config.officeLat, config.officeLng);
 
-  // This single gate protects both check-in and check-out. The action is only
-  // decided after the employee is confirmed to be inside the geofence.
   if (!Number.isFinite(distance)) {
     return res.status(400).json({ error: 'Could not read your location. Try again.' });
-  }
-  if (distance > config.allowedRadiusMeters) {
-    return res.status(403).json({
-      error: `You must be at the office to check in or out. You are ${Math.round(distance)}m away.`,
-      distance: Math.round(distance),
-    });
   }
 
   const now = new Date();
   const nowIso = now.toISOString();
-  const today = todayISO(config.timezone, now);
   const ip = clientIp(req);
   const schedule = scheduleForEmployee(
     req.employee,
     await departmentNamesForEmployees(),
     config,
   );
+
+  // Outside the fence: a check-out attempt is refused, but an open shift is
+  // closed at its saved department finish time and flagged for admin approval.
+  // This keeps the shift from staying open while still blocking payroll until
+  // an administrator accepts or corrects the saved check-out.
+  if (distance > config.allowedRadiusMeters) {
+    const autoClosed = await db.transaction(async (trx) => {
+      const open = await getOpenShift(req.employee.id, now, trx, true);
+      if (!open) return null;
+
+      const checkInDate = new Date(open.check_in);
+      if (Number.isNaN(checkInDate.getTime())) {
+        throw httpError(409, 'This open shift has an invalid check-in time. Ask an administrator to fix it.');
+      }
+
+      const scheduled = scheduledEndFor(open, schedule, config);
+      let checkOutDate = scheduled ? scheduled.at : now;
+      if (checkOutDate.getTime() <= checkInDate.getTime()) checkOutDate = now;
+      const latestAllowed = checkInDate.getTime() + 24 * 60 * 60 * 1000;
+      if (checkOutDate.getTime() > latestAllowed) checkOutDate = new Date(latestAllowed);
+
+      const updated = {
+        check_out: checkOutDate.toISOString(),
+        check_out_distance: distance,
+        check_out_accuracy: accuracy,
+        check_out_ip: ip,
+        approval_status: 'pending',
+        approved_at: null,
+        auto_closed: true,
+        updated_at: nowIso,
+      };
+      const affected = await trx('attendance')
+        .where({ id: open.id })
+        .whereNull('check_out')
+        .update(updated);
+      if (!affected) throw httpError(409, 'This shift was already closed. Refresh and try again.');
+
+      return {
+        record: { ...open, ...updated },
+        checkOut: timeInZone(checkOutDate, config.timezone),
+      };
+    });
+
+    if (autoClosed) {
+      return res.status(403).json({
+        error:
+          `You are ${Math.round(distance)}m from the office, so this check-out was rejected. ` +
+          `Your shift was closed at ${autoClosed.checkOut} and is waiting for admin approval. ` +
+          'You cannot check in again until an administrator approves it.',
+        distance: Math.round(distance),
+        autoClosed: true,
+        checkOut: autoClosed.checkOut,
+        pendingApproval: true,
+      });
+    }
+
+    return res.status(403).json({
+      error: `You must be at the office to check in or out. You are ${Math.round(distance)}m away.`,
+      distance: Math.round(distance),
+    });
+  }
+
+  const today = todayISO(config.timezone, now);
   let outcome;
 
   try {
@@ -582,6 +664,16 @@ app.post('/api/attendance/punch', punchLimiter, requireEmployee, async (req, res
         };
       }
 
+      // A rejected out-of-office check-out becomes a pending record. The
+      // employee may not start another shift until an admin approves it.
+      const pending = await getPendingApproval(req.employee.id, trx, true);
+      if (pending) {
+        throw httpError(
+          403,
+          'Your previous shift is waiting for admin approval. Contact the administrator before checking in again.',
+        );
+      }
+
       let existingQuery = trx('attendance').where({
         employee_id: req.employee.id,
         work_date: today,
@@ -609,6 +701,9 @@ app.post('/api/attendance/punch', punchLimiter, requireEmployee, async (req, res
         shift_end: schedule.workEnd,
         grace_minutes: schedule.graceMinutes,
         night_body_wash: Boolean(schedule.nightBodyWash),
+        approval_status: 'approved',
+        approved_at: null,
+        auto_closed: false,
         created_at: nowIso,
         updated_at: nowIso,
       };
@@ -699,7 +794,7 @@ app.get('/api/admin/overview', adminOnly, async (req, res) => {
     throw httpError(400, error.message);
   }
 
-  const [employees, records, holiday, departments] = await Promise.all([
+  const [employees, records, holiday, departments, pendingCountRow] = await Promise.all([
     db('employees').orderBy('name'),
     db('attendance as a')
       .join('employees as e', 'a.employee_id', 'e.id')
@@ -713,6 +808,7 @@ app.get('/api/admin/overview', adminOnly, async (req, res) => {
       ),
     db('holidays').where({ date }).first(),
     db('departments').orderBy('name'),
+    db('attendance').where({ approval_status: 'pending' }).count({ count: '*' }).first(),
   ]);
 
   const departmentMap = createDepartmentMap(departments);
@@ -769,6 +865,7 @@ app.get('/api/admin/overview', adminOnly, async (req, res) => {
     holiday: holiday ? holiday.name : null,
     workday,
     stats,
+    pendingApprovals: Number(pendingCountRow && pendingCountRow.count) || 0,
     rows,
     timezone: config.timezone,
   });
@@ -897,11 +994,95 @@ app.post('/api/admin/attendance/:id/checkout', adminOnly, adminWriteLimiter, asy
     check_out_distance: null,
     check_out_accuracy: null,
     check_out_ip: null,
+    approval_status: 'approved',
+    approved_at: nowIso,
     updated_at: nowIso,
   });
 
   const updated = await db('attendance').where({ id }).first();
   res.json({ ok: true, record: formatRecord(updated, config, { schedule }), minutes, hours: formatDuration(minutes) });
+});
+
+app.post('/api/admin/attendance/:id/approve', adminOnly, adminWriteLimiter, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) throw httpError(400, 'Invalid attendance record.');
+
+  const record = await db('attendance').where({ id }).first();
+  if (!record) throw httpError(404, 'Attendance record not found.');
+  if (record.approval_status !== 'pending') {
+    throw httpError(409, 'This record is not waiting for approval.');
+  }
+
+  const [employee, departments] = await Promise.all([
+    db('employees').where({ id: record.employee_id }).first(),
+    db('departments').orderBy('name'),
+  ]);
+  const fallbackSchedule = scheduleForEmployee(
+    employee || {},
+    createDepartmentMap(departments),
+    config,
+  );
+  const schedule = scheduleForRecord(record, fallbackSchedule, config);
+  const checkInDate = new Date(record.check_in);
+  if (Number.isNaN(checkInDate.getTime())) {
+    throw httpError(409, 'This record has an invalid check-in time.');
+  }
+
+  const requestedTime = String((req.body && req.body.time) || '').trim();
+  let checkOutIso = record.check_out;
+
+  if (requestedTime) {
+    if (!isValidTime(requestedTime)) {
+      throw httpError(400, 'Enter a check-out time in HH:MM format.');
+    }
+
+    let checkOutDate;
+    try {
+      checkOutDate = localDateTimeToUtc(record.work_date, requestedTime, config.timezone);
+      const overnight =
+        minutesOfDay(schedule.workEnd) <= minutesOfDay(schedule.workStart);
+      if (overnight && checkOutDate.getTime() <= checkInDate.getTime()) {
+        checkOutDate = localDateTimeToUtc(
+          addDays(record.work_date, 1),
+          requestedTime,
+          config.timezone,
+        );
+      }
+    } catch (error) {
+      throw httpError(400, error.message);
+    }
+
+    if (checkOutDate.getTime() <= checkInDate.getTime()) {
+      throw httpError(400, 'Check-out must be after the check-in time.');
+    }
+    const editedMinutes = minutesBetween(record.check_in, checkOutDate.toISOString());
+    if (editedMinutes !== null && editedMinutes > 24 * 60) {
+      throw httpError(400, 'A single shift cannot be longer than 24 hours.');
+    }
+    checkOutIso = checkOutDate.toISOString();
+  }
+
+  if (!checkOutIso) throw httpError(400, 'Add a check-out time before approving.');
+
+  const nowIso = new Date().toISOString();
+  const affected = await db('attendance')
+    .where({ id, approval_status: 'pending' })
+    .update({
+      check_out: checkOutIso,
+      approval_status: 'approved',
+      approved_at: nowIso,
+      updated_at: nowIso,
+    });
+  if (!affected) throw httpError(409, 'This record was already approved. Refresh the report.');
+
+  const updated = await db('attendance').where({ id }).first();
+  const minutes = minutesBetween(updated.check_in, updated.check_out);
+  res.json({
+    ok: true,
+    record: formatRecord(updated, config, { includeAudit: true, schedule }),
+    minutes,
+    hours: formatDuration(minutes),
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -162,7 +162,7 @@
               <div class="panel-head">
                 <div>
                   <h2>Monthly attendance sheet</h2>
-                  <p>Every day of the range becomes a column. Only Night Body Wash departments earn <strong>NB</strong> hours; Workshop and Paint departments earn <strong>OT</strong> (overtime) after their scheduled finish. Filter by department or employee before loading or downloading. The Excel option highlights date cells that include NB hours; email addresses are not included in downloads.</p>
+                  <p>Every day of the range becomes a column. Only Night Body Wash departments earn <strong>NB</strong> hours; Workshop and Paint departments earn <strong>OT</strong> (overtime) after their scheduled finish. Filter by department or employee before loading or downloading. The Excel option highlights date cells that include NB hours; email addresses are not included in downloads. A check-out attempted outside the geofence closes at the department shift end and stays <strong>pending</strong> until an admin approves it.</p>
                 </div>
               </div>
               <form id="report-form" class="toolbar">
@@ -447,6 +447,31 @@
         <div class="dialog-actions">
           <button type="button" class="btn btn--ghost" data-close-dialog="edit-department-dialog">Cancel</button>
           <button type="submit" class="btn btn--primary" id="edit-department-save">Save changes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Approve auto-closed checkout dialog -->
+    <dialog class="dialog" id="approval-dialog">
+      <form id="approval-form" class="dialog-form">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Pending approval</p>
+            <h2>Approve check-out</h2>
+          </div>
+          <button type="button" class="icon-btn" data-close-dialog="approval-dialog" aria-label="Close">×</button>
+        </div>
+        <p class="muted" id="approval-description">—</p>
+        <p class="muted small" id="approval-note">—</p>
+        <label class="field">
+          <span>Check-out time (office time)</span>
+          <input type="time" id="approval-time" />
+        </label>
+        <p class="muted small">Keep the saved department shift end, or change the time before approving.</p>
+        <p class="form-error" id="approval-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn--ghost" data-close-dialog="approval-dialog">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="approval-save">Approve check-out</button>
         </div>
       </form>
     </dialog>

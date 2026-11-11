@@ -73,6 +73,10 @@ async function migrate(db) {
       table.string('shift_end', 5).nullable();
       table.integer('grace_minutes').nullable();
       table.boolean('night_body_wash').nullable();
+      // Autofix workflow for a rejected out-of-geofence checkout.
+      table.string('approval_status', 20).notNullable().defaultTo('approved');
+      table.string('approved_at', 40).nullable();
+      table.boolean('auto_closed').notNullable().defaultTo(false);
       table.string('created_at', 40).notNullable();
       table.string('updated_at', 40).notNullable();
       table.unique(['employee_id', 'work_date']);
@@ -86,6 +90,12 @@ async function migrate(db) {
       ['shift_end', (table) => table.string('shift_end', 5).nullable()],
       ['grace_minutes', (table) => table.integer('grace_minutes').nullable()],
       ['night_body_wash', (table) => table.boolean('night_body_wash').nullable()],
+      [
+        'approval_status',
+        (table) => table.string('approval_status', 20).notNullable().defaultTo('approved'),
+      ],
+      ['approved_at', (table) => table.string('approved_at', 40).nullable()],
+      ['auto_closed', (table) => table.boolean('auto_closed').notNullable().defaultTo(false)],
     ];
     for (const [column, define] of attendanceColumns) {
       if (!(await db.schema.hasColumn('attendance', column))) {

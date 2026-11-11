@@ -645,6 +645,12 @@ code {
   color: var(--brand-strong);
 }
 
+.status-chip--pending {
+  background: var(--red-soft);
+  border-color: #fca5a5;
+  color: var(--red);
+}
+
 .status-dot {
   width: 7px;
   height: 7px;
@@ -1577,6 +1583,12 @@ tbody tr:hover td {
   background: #fff7ed;
   border-color: #fed7aa;
   color: #9a3412;
+}
+
+.badge--pending {
+  background: var(--red-soft);
+  border-color: #fca5a5;
+  color: var(--red);
 }
 
 .badge--holiday {

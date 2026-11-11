@@ -86,6 +86,7 @@
     if (!response.ok) {
       const error = new Error((data && data.error) || `Request failed (${response.status}).`);
       error.status = response.status;
+      error.data = data;
       if (response.status === 401 && redirectOn401) handleSignedOut();
       throw error;
     }
@@ -275,6 +276,19 @@
     button.disabled = false;
     el.punchIcon.innerHTML = ICONS.down;
 
+    if (data.pendingApproval && action !== 'OUT') {
+      const pending = data.pendingApproval;
+      setStatusChip('pending', 'Waiting for admin approval');
+      button.className = 'punch-btn punch-btn--done';
+      button.disabled = true;
+      el.punchIcon.innerHTML = ICONS.check;
+      el['punch-label'].textContent = 'Approval pending';
+      el['punch-hint'].textContent =
+        `Your shift on ${dateLabelShort(pending.workDate)} is waiting for the administrator to approve the check-out. You cannot check in again until it is approved.`;
+      renderSummary(pending);
+      return;
+    }
+
     if (action === 'IN') {
       setStatusChip('neutral', 'Not checked in yet');
       button.className = 'punch-btn punch-btn--in';
@@ -287,6 +301,9 @@
       const since = data.openShift
         ? `${dateLabelShort(record.workDate)} at ${record.checkIn}`
         : record.checkIn;
+      const pendingNote = data.pendingApproval
+        ? ' A previous shift is still waiting for admin approval, so you cannot check in again after this shift.'
+        : '';
       setStatusChip('working', `Working since ${since}`);
       button.className = 'punch-btn punch-btn--out';
       el.punchIcon.innerHTML = ICONS.up;
@@ -295,6 +312,7 @@
         data.schedule && data.schedule.nightBodyWash
           ? 'Take care — this records your finish time. You must be at the office to check out. If you are staying for Night Body Wash, do not check out until you leave.'
           : 'Take care — this records your finish time. You must be at the office to check out.';
+      el['punch-hint'].textContent += pendingNote;
       renderSummary(record);
     } else {
       setStatusChip('done', 'Shift complete');
@@ -322,7 +340,13 @@
     date.textContent = dateLabelShort(record.workDate);
     const status = document.createElement('span');
     status.className = 'history-status';
-    status.textContent = record.open ? 'Open shift' : record.late ? 'Late' : 'Present';
+    status.textContent = record.pending
+      ? 'Pending approval'
+      : record.open
+        ? 'Open shift'
+        : record.late
+          ? 'Late'
+          : 'Present';
     left.append(date, status);
 
     const right = document.createElement('div');
@@ -532,6 +556,11 @@
       button.classList.remove('is-busy');
       if (error.status === 401) return;
       const message = error.status ? error.message : geolocationError(error);
+      if (error.status === 403 || (error.data && error.data.autoClosed)) {
+        showToast(message, 'error', 12000);
+        Promise.allSettled([refreshStatus(), loadHistory()]);
+        return;
+      }
       showToast(message, 'error', 9000);
       if (state.attendance) renderStatus(state.attendance);
     }

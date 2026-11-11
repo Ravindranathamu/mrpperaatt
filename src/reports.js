@@ -118,6 +118,8 @@ function formatRecord(record, config, options = {}) {
   const overtimeMinutes = overtimeMinutesFor(record, config, schedule);
   const late = isLate(checkIn, schedule);
   const open = !record.check_out;
+  const approvalStatus = record.approval_status === 'pending' ? 'pending' : 'approved';
+  const pending = approvalStatus === 'pending';
   const status = open ? STATUS.OPEN : late ? STATUS.LATE : STATUS.PRESENT;
 
   const formatted = {
@@ -135,6 +137,10 @@ function formatRecord(record, config, options = {}) {
     status,
     late,
     open,
+    pending,
+    approvalStatus,
+    approvedAt: record.approved_at || null,
+    autoClosed: Boolean(record.auto_closed),
     shift: schedule.label,
     shiftStart: schedule.workStart,
     shiftEnd: schedule.workEnd,
@@ -164,6 +170,7 @@ function formatRecord(record, config, options = {}) {
 }
 
 function statusLabel(record) {
+  if (record.pending) return 'Pending approval';
   if (record.open) return 'Open (no check-out)';
   if (record.late) return 'Late';
   return 'Present';
@@ -205,6 +212,9 @@ function buildRawRows(records, config, departments = []) {
       statusCode: formatted.status,
       late: formatted.late,
       open: formatted.open,
+      pending: formatted.pending,
+      approvalStatus: formatted.approvalStatus,
+      autoClosed: formatted.autoClosed,
       checkInDistance: formatted.checkInDistance,
       checkOutDistance: formatted.checkOutDistance,
     };
@@ -227,6 +237,7 @@ function summarizeRows(rows) {
     overtimeHours: decimalHours(overtimeMinutes),
     late: rows.filter((row) => row.late).length,
     open: rows.filter((row) => row.open).length,
+    pending: rows.filter((row) => row.pending).length,
   };
 }
 
@@ -265,10 +276,12 @@ function buildMatrix({ employees, records, holidays, from, to, today, config, de
     const schedule = scheduleForEmployee(employee, departmentMap, config);
     const cells = [];
     const nightFlags = [];
+    const pendingFlags = [];
     let presentDays = 0;
     let lateDays = 0;
     let absentDays = 0;
     let openShifts = 0;
+    let pendingApprovals = 0;
     let totalMinutes = 0;
     let nightMinutes = 0;
     let overtimeMinutes = 0;
@@ -279,7 +292,15 @@ function buildMatrix({ employees, records, holidays, from, to, today, config, de
 
       if (record) {
         const formatted = formatRecord(record, config, { schedule, nightStart });
-        const prefix = formatted.open ? (formatted.late ? 'L' : 'P') : formatted.status === STATUS.LATE ? 'L' : 'P';
+        const prefix = formatted.pending
+          ? 'PENDING'
+          : formatted.open
+            ? formatted.late
+              ? 'L'
+              : 'P'
+            : formatted.status === STATUS.LATE
+              ? 'L'
+              : 'P';
         if (formatted.open) {
           cells.push(`${prefix} ${formatted.checkIn}–OPEN`);
           openShifts += 1;
@@ -293,24 +314,30 @@ function buildMatrix({ employees, records, holidays, from, to, today, config, de
           );
         }
         nightFlags.push(Boolean(formatted.nightMinutes > 0));
+        pendingFlags.push(Boolean(formatted.pending));
         presentDays += 1;
         if (formatted.late) lateDays += 1;
+        if (formatted.pending) pendingApprovals += 1;
         totalMinutes += formatted.minutes || 0;
         nightMinutes += formatted.nightMinutes || 0;
         overtimeMinutes += formatted.overtimeMinutes || 0;
       } else if (column.holiday) {
         cells.push('H');
         nightFlags.push(false);
+        pendingFlags.push(false);
       } else if (column.weekend) {
         cells.push('');
         nightFlags.push(false);
+        pendingFlags.push(false);
       } else if (employee.active && date < today) {
         cells.push('A');
         nightFlags.push(false);
+        pendingFlags.push(false);
         absentDays += 1;
       } else {
         cells.push('');
         nightFlags.push(false);
+        pendingFlags.push(false);
       }
     }
 
@@ -323,10 +350,12 @@ function buildMatrix({ employees, records, holidays, from, to, today, config, de
       active: Boolean(employee.active),
       cells,
       nightFlags,
+      pendingFlags,
       presentDays,
       lateDays,
       absentDays,
       openShifts,
+      pendingApprovals,
       totalMinutes,
       totalHours: decimalHours(totalMinutes),
       nightMinutes,
@@ -435,7 +464,25 @@ async function matrixToXlsx(matrix) {
     for (let index = 0; index < row.cells.length; index += 1) {
       const cell = excelRow.getCell(fixedColumns + index + 1);
       cell.alignment = { vertical: 'top', wrapText: true };
-      if (row.nightFlags && row.nightFlags[index]) {
+      const night = Boolean(row.nightFlags && row.nightFlags[index]);
+      const pending = Boolean(row.pendingFlags && row.pendingFlags[index]);
+
+      if (pending) {
+        // A pending checkout is the priority: red bold text and a red border,
+        // while a Night Body Wash cell keeps its yellow fill so NB is not lost.
+        cell.font = { bold: true, color: { argb: 'FFB91C1C' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: night ? 'FFFFF2CC' : 'FFFFE4E6' },
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFDC2626' } },
+          bottom: { style: 'thin', color: { argb: 'FFDC2626' } },
+          left: { style: 'thin', color: { argb: 'FFDC2626' } },
+          right: { style: 'thin', color: { argb: 'FFDC2626' } },
+        };
+      } else if (night) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
         cell.font = { bold: true, color: { argb: 'FF92400E' } };
       }
@@ -479,6 +526,7 @@ function rawRowsToCsv(rows) {
     'Night Body Wash hours',
     'Overtime hours',
     'Status',
+    'Approval',
     'Check-in distance (m)',
     'Check-out distance (m)',
   ];
@@ -495,6 +543,7 @@ function rawRowsToCsv(rows) {
       row.nightHoursDecimal,
       row.overtimeHoursDecimal,
       row.status,
+      row.pending ? 'Pending approval' : 'Approved',
       row.checkInDistance ?? '',
       row.checkOutDistance ?? '',
     ]),

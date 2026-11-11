@@ -22,6 +22,7 @@
     editEmployeeId: null,
     editDepartmentId: null,
     fixRecord: null,
+    approveRecord: null,
   };
 
   const el = {};
@@ -102,6 +103,13 @@
       'fix-time',
       'fix-error',
       'fix-save',
+      'approval-dialog',
+      'approval-form',
+      'approval-description',
+      'approval-note',
+      'approval-time',
+      'approval-error',
+      'approval-save',
       'admin-toast',
     ];
     for (const id of ids) el[id] = document.getElementById(id);
@@ -332,9 +340,10 @@
     return `<span class="badge badge--${tone}">${escapeHtml(label)}</span>`;
   }
 
-  function statusBadges(status, late) {
+  function statusBadges(status, late, pending) {
     let html = '';
-    if (status === 'WORKING') html += badge('Working', 'working');
+    if (pending) html += badge('Pending approval', 'pending');
+    else if (status === 'WORKING') html += badge('Working', 'working');
     else if (status === 'COMPLETE') html += badge('Completed', 'complete');
     else if (status === 'NOT_IN') html += badge('Not checked in', 'not-in');
     else html += badge('Day off', 'off');
@@ -363,6 +372,12 @@
           value: stats.notIn,
           note: data.workday ? 'Awaiting arrival' : 'Non-working day',
           tone: data.workday && stats.notIn > 0 ? 'warning' : '',
+        },
+        {
+          label: 'Pending approval',
+          value: data.pendingApprovals,
+          note: data.pendingApprovals ? 'Awaiting admin review' : 'All clear',
+          tone: data.pendingApprovals ? 'warning' : '',
         },
       ]);
 
@@ -398,7 +413,7 @@
           (row.schedule ? `${row.schedule.workStart}–${row.schedule.workEnd}` : '—');
 
         const statusCell = document.createElement('td');
-        statusCell.innerHTML = statusBadges(row.status, row.late);
+        statusCell.innerHTML = statusBadges(row.status, row.late, record && record.pending);
 
         const inCell = document.createElement('td');
         inCell.className = `time-cell${record ? '' : ' time-cell--muted'}`;
@@ -559,6 +574,11 @@
         },
         { label: 'Late', value: data.summary.late, tone: data.summary.late ? 'warning' : '' },
         { label: 'Open shifts', value: data.summary.open, tone: data.summary.open ? 'warning' : '' },
+        {
+          label: 'Pending approval',
+          value: data.summary.pending,
+          tone: data.summary.pending ? 'warning' : '',
+        },
       ]);
 
       const filterLabels = [];
@@ -599,6 +619,9 @@
         const outCell = document.createElement('td');
         outCell.className = `time-cell${row.checkOut ? '' : ' time-cell--muted'}`;
         outCell.textContent = row.checkOut || '—';
+        if (row.pending) {
+          outCell.title = 'Auto-closed at the department shift end; waiting for admin approval';
+        }
 
         const hoursCell = document.createElement('td');
         hoursCell.className = 'time-cell';
@@ -615,14 +638,18 @@
         overtimeCell.title = 'Overtime after the employee’s scheduled finish';
 
         const statusCell = document.createElement('td');
-        statusCell.innerHTML = row.open
-          ? badge('Open', 'open')
-          : row.late
-            ? badge('Late', 'late')
-            : badge('Present', 'complete');
+        statusCell.innerHTML = row.pending
+          ? `${badge('Pending approval', 'pending')}${row.late ? ` ${badge('Late', 'late')}` : ''}`
+          : row.open
+            ? badge('Open', 'open')
+            : row.late
+              ? badge('Late', 'late')
+              : badge('Present', 'complete');
 
         const actionCell = document.createElement('td');
-        if (row.open) {
+        if (row.pending) {
+          actionCell.innerHTML = `<button type="button" class="btn btn--primary btn--small" data-approve-id="${row.id}">Approve</button>`;
+        } else if (row.open) {
           actionCell.innerHTML = `<button type="button" class="btn btn--ghost btn--small" data-fix-id="${row.id}">Fix checkout</button>`;
         }
 
@@ -934,6 +961,20 @@
     el['fix-error'].hidden = true;
     el['fix-dialog'].showModal();
     setTimeout(() => el['fix-time'].focus(), 50);
+  }
+
+  function openApproveDialog(record) {
+    state.approveRecord = record;
+    el['approval-description'].textContent =
+      `${record.employee} · ${formatDateLabel(record.date, true)} · ` +
+      `${record.checkIn} → ${record.checkOut || '—'}`;
+    el['approval-note'].textContent = record.autoClosed
+      ? 'The shift was closed automatically at the department shift end after an out-of-office check-out attempt.'
+      : 'This shift is waiting for approval before it can be finalised.';
+    el['approval-time'].value = record.checkOut || '';
+    el['approval-error'].hidden = true;
+    el['approval-dialog'].showModal();
+    setTimeout(() => el['approval-time'].focus(), 50);
   }
 
   function openEditDepartment(department) {
@@ -1284,12 +1325,23 @@
     });
 
     el['report-table-body'].addEventListener('click', (event) => {
-      const button = event.target.closest('[data-fix-id]');
-      if (!button || !state.report) return;
-      const record = state.report.rows.find(
-        (row) => String(row.id) === String(button.dataset.fixId),
-      );
-      if (record) openFixDialog(record);
+      if (!state.report) return;
+      const fixButton = event.target.closest('[data-fix-id]');
+      if (fixButton) {
+        const record = state.report.rows.find(
+          (row) => String(row.id) === String(fixButton.dataset.fixId),
+        );
+        if (record) openFixDialog(record);
+        return;
+      }
+
+      const approveButton = event.target.closest('[data-approve-id]');
+      if (approveButton) {
+        const record = state.report.rows.find(
+          (row) => String(row.id) === String(approveButton.dataset.approveId),
+        );
+        if (record) openApproveDialog(record);
+      }
     });
 
     el['fix-form'].addEventListener('submit', async (event) => {
@@ -1313,6 +1365,29 @@
         el['fix-error'].hidden = false;
       } finally {
         el['fix-save'].disabled = false;
+      }
+    });
+
+    el['approval-form'].addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!state.approveRecord) return;
+      const time = el['approval-time'].value;
+      el['approval-save'].disabled = true;
+      el['approval-error'].hidden = true;
+      try {
+        await api(`/api/admin/attendance/${state.approveRecord.id}/approve`, {
+          method: 'POST',
+          body: JSON.stringify(time ? { time } : {}),
+        });
+        el['approval-dialog'].close();
+        showToast('Check-out approved.');
+        loadReport();
+        if (state.loaded.today) loadToday(true);
+      } catch (error) {
+        el['approval-error'].textContent = error.message;
+        el['approval-error'].hidden = false;
+      } finally {
+        el['approval-save'].disabled = false;
       }
     });
 
