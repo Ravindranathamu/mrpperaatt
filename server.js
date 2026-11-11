@@ -8,7 +8,7 @@ const cookieSession = require('cookie-session');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 const { loadConfig } = require('./src/config');
-const { createDatabase, migrate, healthCheck } = require('./src/db');
+const { createDatabase, migrate, seedDefaultDepartments, healthCheck } = require('./src/db');
 const { distanceMeters } = require('./src/geo');
 const {
   todayISO,
@@ -1473,6 +1473,10 @@ async function syncDepartmentsFromEmployees() {
 
 async function start() {
   await migrate(db);
+  const seededDepartments = await seedDefaultDepartments(db);
+  if (seededDepartments) {
+    console.log(`[attendance] Seeded ${seededDepartments} standard departments.`);
+  }
   await syncDepartmentsFromEmployees();
 
   const server = app.listen(config.port, () => {

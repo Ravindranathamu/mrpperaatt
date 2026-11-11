@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const knex = require('knex');
+const { DEFAULT_DEPARTMENTS } = require('./default-departments');
 
 function postgresConnection(config) {
   if (!config.databaseUrl) throw new Error('DATABASE_URL is required for PostgreSQL.');
@@ -135,6 +136,30 @@ async function migrate(db) {
   }
 }
 
+/**
+ * A brand-new database has no departments. Seed the nine standard ones once so
+ * the first admin visit already has the right shifts and evening rules. An
+ * existing department list is never modified; the admin can edit every time.
+ */
+async function seedDefaultDepartments(db) {
+  const row = await db('departments').count({ count: '*' }).first();
+  if (Number(row && row.count) > 0) return 0;
+
+  const now = new Date().toISOString();
+  await db('departments')
+    .insert(
+      DEFAULT_DEPARTMENTS.map((department) => ({
+        ...department,
+        created_at: now,
+        updated_at: now,
+      })),
+    )
+    .onConflict('name')
+    .ignore();
+
+  return DEFAULT_DEPARTMENTS.length;
+}
+
 async function healthCheck(db) {
   await db.raw('select 1 as ok');
   return true;
@@ -143,5 +168,6 @@ async function healthCheck(db) {
 module.exports = {
   createDatabase,
   migrate,
+  seedDefaultDepartments,
   healthCheck,
 };

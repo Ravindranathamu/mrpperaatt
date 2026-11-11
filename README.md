@@ -434,10 +434,11 @@ Self-registration:
    (Render may inject a different port; that is normal.)
 3. Open `https://YOUR-SERVICE.onrender.com/api/health`. It should return `{"ok":true}`.
 4. Open `https://YOUR-SERVICE.onrender.com/admin` and sign in with the production password.
-5. Open **Departments** and create **Service**, **Day Body Wash**, **Clean Park**, **Night Body
-   Wash**, **Workshop 1**, **Workshop 2**, **Paint A**, **Paint B**, and **Paint C** with their
-   shifts and evening rules. You can also run `npm run setup:departments` against the production
-   database by setting `DATABASE_URL` and `DATABASE_SSL` in the environment first.
+5. Open **Departments**. On a brand-new database the app seeds the nine standard departments on
+   first boot: **Service**, **Day Body Wash**, **Clean Park**, **Night Body Wash**, **Workshop 1**,
+   **Workshop 2**, **Paint A**, **Paint B**, and **Paint C**, with their default shifts and evening
+   rules. Adjust any times that differ at your branch. `npm run setup:departments` remains available
+   as a repair/reseed command.
 6. Add your real employees and assign their departments, or let domain-restricted
    self-registration create them and assign departments afterwards.
 
