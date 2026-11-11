@@ -462,6 +462,14 @@ app.get('/api/session', (req, res) => {
   });
 });
 
+// Lightweight liveness probe for external keep-awake monitors. It deliberately
+// does not touch the database: pinging /api/health every few minutes would keep
+// Neon awake around the clock and can exhaust the free compute hours. Render's
+// own deploy health check still uses /api/health below.
+app.get('/api/ping', (req, res) => {
+  res.json({ ok: true });
+});
+
 app.get('/api/health', async (req, res) => {
   try {
     await healthCheck(db);

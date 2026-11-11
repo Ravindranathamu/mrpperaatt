@@ -487,9 +487,15 @@ with a free external monitor:
 
 1. Create a free account at <https://uptimerobot.com> (no card required).
 2. Choose **Add New Monitor → HTTP(s)**.
-3. URL: `https://YOUR-SERVICE.onrender.com/api/health`
+3. URL: `https://YOUR-SERVICE.onrender.com/api/ping`
 4. Interval: **5 minutes**. Add your email as the alert contact.
 5. Save. The monitor's request counts as inbound traffic, so Render stays awake.
+
+> Use `/api/ping`, not `/api/health`. `/api/health` queries Neon; a 5-minute ping would keep
+> Neon awake around the clock and can exhaust its **100 CU-hour** monthly free allowance.
+> `/api/ping` answers without touching the database, so Neon can scale to zero between real
+> punches. Render's own deploy health check still uses `/api/health`, which is fine because it
+> runs only during a deploy.
 
 Free alternative: <https://cron-job.org> — create a job for the same URL every 5 minutes.
 
