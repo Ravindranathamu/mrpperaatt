@@ -6,6 +6,9 @@ node_modules/
 .env.*
 !.env.example
 
+# Local production deployment notes (URLs, project IDs, last commit)
+deployment.local.md
+
 # Local SQLite database and backups
 data/
 *.db

@@ -8,6 +8,8 @@ The admin dashboard shows live attendance, manages employees and holidays, and d
 month-end attendance sheet that opens in Excel.
 
 No employee app to install. No monthly fee if you stay within the free tiers of Neon and Render.
+Render's free service sleeps after 15 idle minutes; Part 4.7 shows how to keep it awake with a free
+external monitor.
 
 ---
 
@@ -37,7 +39,8 @@ No employee app to install. No monthly fee if you stay within the free tiers of 
 - **Raw data CSV** — one row per shift, including department shift, distance, late status, Night
   Body Wash hours, overtime hours, and approval status.
 - **Timezone-aware** — all dates, times, late calculations, and reports use your office timezone.
-- **Free production stack** — Back4App Containers for the app and Neon for the database, both HTTPS.
+- **Free production stack** — Render for the app and Neon for the database, both HTTPS and no card.
+  The `render.yaml` Blueprint creates the service in Singapore with one click.
 - **Secure by default** — server-side Google token verification, signed HttpOnly sessions,
   rate limits, origin checks, protected admin exports, and CSV formula-injection protection.
 
@@ -364,10 +367,18 @@ The steps below are the same.
 
 5. Do not add a persistent disk. The database lives in Neon.
 
+> **Faster option — Blueprint:** this repository includes `render.yaml`. In Render choose
+> **New + → Blueprint**, connect the repository, and click **Apply**. Render creates the same free
+> Singapore service with the build, start, health-check, region, and non-secret variables already
+> filled in. It prompts once for `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `ADMIN_PASSWORD`,
+> `OFFICE_LAT`, and `OFFICE_LNG`, and generates `SESSION_SECRET` automatically. If you use the
+> Blueprint, skip the manual settings above and continue at 4.4.
+
 ### 4.3 Add environment variables
 
-In Render, open **Environment** and add every value below. Do **not** set `PORT`; Render sets it
-automatically.
+If you created the service with the Blueprint, open **Environment** and verify the values below;
+the non-secret ones are already filled in. If you created the service manually, add every value.
+Do **not** set `PORT`; Render sets it automatically.
 
 | Variable | Production value |
 | --- | --- |
@@ -468,16 +479,29 @@ then regenerate the QR poster with the new URL.
 - [ ] The raw CSV includes the **Approval** column and no email addresses.
 - [ ] The QR link points to the real HTTPS URL, not `localhost`.
 
-### 4.7 Render free-plan behavior
+### 4.7 Keep the free service awake (important)
 
-- The free web service **sleeps after a period of inactivity** (currently about 15 minutes) and
-  takes roughly a minute to wake on the next visit. Tell employees to wait if the first scan
-  feels slow.
-- Free services have limited memory/CPU and may restart. Sessions are stored in signed cookies,
-  and data is in Neon, so restarts do not lose attendance.
-- Do not rely on Render's local disk for anything. The app intentionally uses Neon.
-- Provider limits can change. Check the Render and Neon pricing pages before relying on the free
-  tiers for a large team.
+Render free web services spin down after **15 minutes without inbound traffic** and take about
+a minute to wake. A printed QR at the entrance cannot wait a minute, so keep the service awake
+with a free external monitor:
+
+1. Create a free account at <https://uptimerobot.com> (no card required).
+2. Choose **Add New Monitor → HTTP(s)**.
+3. URL: `https://YOUR-SERVICE.onrender.com/api/health`
+4. Interval: **5 minutes**. Add your email as the alert contact.
+5. Save. The monitor's request counts as inbound traffic, so Render stays awake.
+
+Free alternative: <https://cron-job.org> — create a job for the same URL every 5 minutes.
+
+Render gives **750 free instance hours per workspace per calendar month**. A 31-day month is 744
+hours, so one always-awake service just fits. Keep exactly one free service in the workspace. If
+Render shows usage approaching 750 hours, restrict the monitor to 05:00–22:30 Asia/Colombo
+(about 540 hours/month) so the app sleeps overnight.
+
+Caveats: the free plan is officially for testing/hobby use, has no uptime SLA, and may restart
+during deploys or maintenance. Signed-cookie sessions and Neon data survive restarts, but an
+in-flight request can fail. For guaranteed production uptime, use a paid instance or an
+always-on office PC. Do not rely on Render's local disk.
 
 ### 4.8 Updating the app
 
@@ -493,34 +517,34 @@ Environment-variable changes trigger a restart. Changing `SESSION_SECRET` signs 
 Changing `ADMIN_PASSWORD` changes future logins; existing admin sessions last up to 12 hours.
 To force an immediate admin logout, also change `SESSION_SECRET`.
 
-### 4.9 Free no-card alternative — Back4App Containers
+### 4.8a Save the deployment details locally
 
-If Render asks for a credit card, **Back4App Containers** has a free plan that does not require
-one: 0.25 CPU, 256 MB RAM, 100 GB transfer, and a free HTTPS URL. The repository includes a
-`Dockerfile`, so no code changes are needed.
+The repository ignores `deployment.local.md`. Fill it in with the Render dashboard link, the
+production URL, the Neon project/region, the Google client ID, and the last deployed commit.
+Do not write the Neon password, `SESSION_SECRET`, or `ADMIN_PASSWORD` there. Future changes are
+then: edit locally → `npm test` → commit → push; Render redeploys automatically.
 
-1. Sign up at <https://www.back4app.com> and open **Containers**.
-2. Click **Create New App** and connect your GitHub account.
-3. Select this repository.
-4. Configure:
-   - **Branch:** `main`
-   - **Root:** `/` (the folder containing `Dockerfile`)
-   - **Auto Deployment:** on
-5. Add the same environment variables listed in Part 4.3, except **do not set `PORT`**.
-   `NODE_ENV=production`, `DATABASE_URL`, and `DATABASE_SSL=true` are still required.
-6. Click **Create App** and watch the deployment logs.
-7. Copy the generated HTTPS URL from the app dashboard.
-8. Open `https://YOUR-APP-URL/api/health`. It should return `{"ok":true}`.
-9. Add that exact origin under **Authorized JavaScript origins** in Google (Part 4.5).
-10. Sign in at `/admin`, then create departments, employees, and test a real phone.
+### 4.9 Hosting reality check — why not Back4App free?
 
-Back4App's free region is in the USA, so requests from Sri Lanka have more latency than a
-Singapore region. The 256 MB memory limit is enough for a small team, but a very large monthly
-Excel export may be slower. Free plans can change; check the current limits before relying on one
-for payroll.
+Back4App Containers still advertises a free plan, but since 15 September 2026 the free plan's
+`*.b4a.run` address is **temporary and expires 60 minutes after each deployment**, and push
+auto-deploy is a paid feature. That makes it unusable for a printed QR poster.
 
-As a no-card fallback, you can also run the app on an always-on office PC and publish it with
-Tailscale Funnel. That requires a stable PC and gives a `https://....ts.net` URL.
+Other no-card options checked in November 2026:
+
+| Host | Free no-card web service? | Catch |
+| --- | --- | --- |
+| Render | Yes | Sleeps after 15 min; use the keep-awake monitor in 4.7 |
+| Back4App Containers | Yes, but the URL expires | 60-minute URL; no push auto-deploy on free |
+| Alwaysdata | Yes | Free plan is personal-use only; for-profit/services prohibited |
+| Koyeb | No free compute | Paid plans start at $29/month |
+| Zeabur | Dashboard only | No free compute |
+| Fly.io, Railway | No | Card required |
+
+If Render ever asks for a card, the honest choices are a small paid plan (about $5–7/month) or
+running the app on an always-on office PC and publishing it through a tunnel. A tunnel needs a
+stable HTTPS address; Tailscale Funnel gives a `https://....ts.net` URL but its Personal plan is
+not intended for commercial use. For a business, a paid host is the reliable answer.
 
 ---
 
@@ -905,7 +929,7 @@ Recommended production settings:
 | Pending row is red in Excel | It is still awaiting approval. Approve it in Reports, then download again for payroll. |
 | Admin password rejected | Check `ADMIN_PASSWORD` in the running environment. Changing `.env` requires a restart. Rate limit after 10 failures: wait 15 minutes. |
 | 429 "Too many attempts" | Rate limiting. Wait, then retry. |
-| Render page takes ~1 minute to load | Free service was asleep. Wait for it to wake; consider a paid instance for a busy office. |
+| Render page takes ~1 minute to load | Free service was asleep. Set up the 5-minute keep-awake monitor in Part 4.7. |
 | Render deploy fails on `better-sqlite3` | Local Node version mismatch or missing build tools. Production uses Postgres, but the package still installs. Set a supported Node version and redeploy; check Render build logs. |
 | App crashes at boot in production | Read the log: usually a weak/missing `ADMIN_PASSWORD` or `SESSION_SECRET`, invalid timezone, or bad `DATABASE_URL`. |
 | `{"ok":false}` from `/api/health` | Database connection problem. Check `DATABASE_URL`, Neon project status, and SSL settings. |
