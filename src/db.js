@@ -26,7 +26,9 @@ function createDatabase(config) {
     return knex({
       client: 'pg',
       connection: postgresConnection(config),
-      pool: { min: 0, max: 5, acquireTimeoutMillis: 15000 },
+      // Netlify Server closes outbound connections that are idle for 60 seconds,
+      // so recycle pool connections well before that limit.
+      pool: { min: 0, max: 5, acquireTimeoutMillis: 15000, idleTimeoutMillis: 30000 },
     });
   }
 

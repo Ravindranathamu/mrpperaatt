@@ -270,6 +270,9 @@ a `.env` file.
 | `ALLOW_SELF_REGISTRATION` | `false` |
 | `ALLOWED_EMAIL_DOMAINS` | leave empty when self-registration is off |
 
+For every variable, open its **Scopes** and make sure **Functions** (or **All scopes**) is enabled.
+A variable scoped only to builds is not visible to the running server.
+
 Generate the session secret locally:
 
 ```powershell
