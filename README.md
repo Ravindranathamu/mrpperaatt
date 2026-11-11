@@ -482,6 +482,35 @@ Environment-variable changes trigger a restart. Changing `SESSION_SECRET` signs 
 Changing `ADMIN_PASSWORD` changes future logins; existing admin sessions last up to 12 hours.
 To force an immediate admin logout, also change `SESSION_SECRET`.
 
+### 4.9 Free no-card alternative — Back4App Containers
+
+If Render asks for a credit card, **Back4App Containers** has a free plan that does not require
+one: 0.25 CPU, 256 MB RAM, 100 GB transfer, and a free HTTPS URL. The repository includes a
+`Dockerfile`, so no code changes are needed.
+
+1. Sign up at <https://www.back4app.com> and open **Containers**.
+2. Click **Create New App** and connect your GitHub account.
+3. Select this repository.
+4. Configure:
+   - **Branch:** `main`
+   - **Root:** `/` (the folder containing `Dockerfile`)
+   - **Auto Deployment:** on
+5. Add the same environment variables listed in Part 4.3, except **do not set `PORT`**.
+   `NODE_ENV=production`, `DATABASE_URL`, and `DATABASE_SSL=true` are still required.
+6. Click **Create App** and watch the deployment logs.
+7. Copy the generated HTTPS URL from the app dashboard.
+8. Open `https://YOUR-APP-URL/api/health`. It should return `{"ok":true}`.
+9. Add that exact origin under **Authorized JavaScript origins** in Google (Part 4.5).
+10. Sign in at `/admin`, then create departments, employees, and test a real phone.
+
+Back4App's free region is in the USA, so requests from Sri Lanka have more latency than a
+Singapore region. The 256 MB memory limit is enough for a small team, but a very large monthly
+Excel export may be slower. Free plans can change; check the current limits before relying on one
+for payroll.
+
+As a no-card fallback, you can also run the app on an always-on office PC and publish it with
+Tailscale Funnel. That requires a stable PC and gives a `https://....ts.net` URL.
+
 ---
 
 ## Part 5 — Print the QR poster
@@ -491,7 +520,7 @@ Generate the poster **after** you know the final HTTPS URL.
 ### 5.1 Generate the artwork
 
 ```powershell
-npm run qr -- https://YOUR-SERVICE.onrender.com "Main entrance"
+npm run qr -- https://YOUR-APP-URL "Main entrance"
 ```
 
 The second argument is the location label printed on the poster. Output:
