@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="Administrator dashboard for office attendance." />
+    <title>Admin · Office Attendance</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-body">
+    <a class="skip-link" href="#admin-main">Skip to content</a>
+
+    <div id="login-screen" class="login-screen">
+      <div class="login-card">
+        <a class="brand brand--dark" href="/" aria-label="Office attendance home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.25"></circle>
+              <path d="M12 7.75V12l2.9 1.85"></path>
+            </svg>
+          </span>
+          <span class="brand-name" id="login-company-name">Office Attendance</span>
+        </a>
+
+        <p class="eyebrow">Administrator</p>
+        <h1>Sign in</h1>
+        <p class="muted">Review today's attendance, manage your team, and download monthly sheets.</p>
+
+        <form id="login-form" class="stack" novalidate>
+          <label class="field">
+            <span>Admin password</span>
+            <input
+              type="password"
+              id="login-password"
+              name="password"
+              autocomplete="current-password"
+              required
+              autofocus
+              placeholder="Enter your admin password"
+            />
+          </label>
+          <p class="form-error" id="login-error" role="alert" hidden></p>
+          <button type="submit" class="btn btn--primary btn--full" id="login-btn">Sign in</button>
+        </form>
+
+        <a class="auth-link" href="/">← Employee check-in</a>
+        <p class="login-copyright" id="login-footer-copy"></p>
+      </div>
+    </div>
+
+    <div id="admin-app" class="admin-shell" hidden>
+      <aside class="admin-sidebar">
+        <a class="brand brand--light" href="/admin" aria-label="Admin home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.25"></circle>
+              <path d="M12 7.75V12l2.9 1.85"></path>
+            </svg>
+          </span>
+          <span class="brand-name" id="admin-company-name">Office Attendance</span>
+        </a>
+
+        <nav class="admin-nav" aria-label="Admin sections">
+          <button type="button" class="nav-item is-active" data-tab="today">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3.5" y="5" width="17" height="15.5" rx="2.5"></rect>
+              <path d="M7.5 3v4M16.5 3v4M3.5 10h17"></path>
+            </svg>
+            Today
+          </button>
+          <button type="button" class="nav-item" data-tab="reports">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 4.5v15h16"></path>
+              <path d="m7.5 15 3.5-4 3 2.2 4.5-6"></path>
+            </svg>
+            Reports
+          </button>
+          <button type="button" class="nav-item" data-tab="employees">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="9" cy="8.5" r="3.2"></circle>
+              <path d="M3.5 20c.5-3.6 2.6-5.6 5.5-5.6s5 2 5.5 5.6"></path>
+              <path d="M16 5.2a3.2 3.2 0 0 1 0 6.3M17.5 14.8c1.8.7 2.8 2.4 3 5.2"></path>
+            </svg>
+            Employees
+          </button>
+          <button type="button" class="nav-item" data-tab="departments">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 20V9.5L12 4l8 5.5V20"></path>
+              <path d="M9 20v-6h6v6"></path>
+              <path d="M9 9.5h6"></path>
+            </svg>
+            Departments
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <a class="sidebar-link" href="/">Employee check-in</a>
+          <button type="button" class="sidebar-link" id="admin-logout">Sign out</button>
+          <p class="sidebar-copyright" id="admin-footer-copy"></p>
+        </div>
+      </aside>
+
+      <div class="admin-content" id="admin-main">
+        <header class="admin-topbar">
+          <div>
+            <p class="eyebrow" id="admin-date-label">—</p>
+            <h1 id="admin-title">Today</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="live-pill"><span class="live-dot" aria-hidden="true"></span> Live</span>
+            <button type="button" class="btn btn--ghost btn--small" id="refresh-btn">Refresh</button>
+          </div>
+        </header>
+
+        <main class="admin-main">
+          <!-- TODAY -->
+          <section class="tab-panel" id="panel-today" data-panel="today">
+            <div class="stat-grid" id="today-stats">
+              <article class="stat-card stat-card--skeleton"></article>
+              <article class="stat-card stat-card--skeleton"></article>
+              <article class="stat-card stat-card--skeleton"></article>
+              <article class="stat-card stat-card--skeleton"></article>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Today's attendance</h2>
+                  <p id="today-subtitle">Loading today's records…</p>
+                </div>
+                <span class="badge badge--holiday" id="today-holiday" hidden></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Shift</th>
+                      <th>Status</th>
+                      <th>Check in</th>
+                      <th>Check out</th>
+                      <th>Hours</th>
+                      <th>Distance</th>
+                    </tr>
+                  </thead>
+                  <tbody id="today-table-body"></tbody>
+                </table>
+              </div>
+              <div class="empty-state" id="today-empty" hidden>
+                <p>No team members yet.</p>
+                <button type="button" class="link-btn" data-go-tab="employees">Add your first employee →</button>
+              </div>
+              <p class="table-legend" id="today-legend">Loading attendance rules…</p>
+            </div>
+          </section>
+
+          <!-- REPORTS -->
+          <section class="tab-panel" id="panel-reports" data-panel="reports" hidden>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Monthly attendance sheet</h2>
+                  <p>Every day of the range becomes a column. Only Night Body Wash departments earn <strong>NB</strong> hours; Workshop and Paint departments earn <strong>OT</strong> (overtime) after their scheduled finish. Filter by department or employee before loading or downloading. The Excel option highlights date cells that include NB hours; email addresses are not included in downloads.</p>
+                </div>
+              </div>
+              <form id="report-form" class="toolbar">
+                <label class="field field--inline">
+                  <span>From</span>
+                  <input type="date" id="report-from" required />
+                </label>
+                <label class="field field--inline">
+                  <span>To</span>
+                  <input type="date" id="report-to" required />
+                </label>
+                <label class="field field--inline">
+                  <span>Department</span>
+                  <select id="report-department">
+                    <option value="">All departments</option>
+                  </select>
+                </label>
+                <label class="field field--inline">
+                  <span>Employee</span>
+                  <select id="report-employee">
+                    <option value="">All employees</option>
+                  </select>
+                </label>
+                <button type="submit" class="btn btn--primary">Load report</button>
+                <span class="toolbar-spacer"></span>
+                <button type="button" class="btn btn--ghost" id="download-matrix">Download monthly sheet (CSV)</button>
+                <button type="button" class="btn btn--ghost" id="download-excel">Download monthly sheet (Excel, NB highlighted)</button>
+                <button type="button" class="btn btn--ghost" id="download-raw">Download raw data (CSV)</button>
+              </form>
+            </div>
+
+            <div class="stat-grid stat-grid--compact" id="report-stats"></div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Attendance records</h2>
+                  <p id="report-subtitle">Choose a date range and load the report.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Employee</th>
+                      <th>Shift</th>
+                      <th>Check in</th>
+                      <th>Check out</th>
+                      <th>Hours</th>
+                      <th>Night Body Wash</th>
+                      <th>Overtime</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="report-table-body"></tbody>
+                </table>
+              </div>
+              <div class="empty-state" id="report-empty" hidden>
+                <p>No check-in records in this range.</p>
+                <p class="small muted">The monthly sheet will still mark absences for active employees.</p>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Holidays</h2>
+                  <p>Holiday dates are marked H and are not counted as absences.</p>
+                </div>
+              </div>
+              <form id="holiday-form" class="toolbar">
+                <label class="field field--inline">
+                  <span>Date</span>
+                  <input type="date" id="holiday-date" required />
+                </label>
+                <label class="field field--inline field--grow">
+                  <span>Name</span>
+                  <input type="text" id="holiday-name" maxlength="120" placeholder="e.g. Poya Day" />
+                </label>
+                <button type="submit" class="btn btn--primary">Add holiday</button>
+              </form>
+              <div class="holiday-list" id="holiday-list">
+                <p class="muted small">Loading holidays…</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- EMPLOYEES -->
+          <section class="tab-panel" id="panel-employees" data-panel="employees" hidden>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Add employee</h2>
+                  <p>Pre-add the team so absences appear in the monthly sheet. Their Google email must match.</p>
+                </div>
+              </div>
+              <form id="employee-form" class="toolbar">
+                <label class="field field--inline field--grow">
+                  <span>Full name</span>
+                  <input type="text" id="employee-name" maxlength="255" required placeholder="e.g. Nimal Perera" />
+                </label>
+                <label class="field field--inline field--grow">
+                  <span>Google email</span>
+                  <input type="email" id="employee-email" maxlength="255" required placeholder="nimal@company.com" />
+                </label>
+                <label class="field field--inline">
+                  <span>Department</span>
+                  <select id="employee-department">
+                    <option value="">No department (default shift)</option>
+                  </select>
+                </label>
+                <button type="submit" class="btn btn--primary">Add employee</button>
+              </form>
+              <p class="fineprint">
+                If self-registration is enabled, an employee is added automatically the first time
+                they sign in with Google.
+              </p>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Team</h2>
+                  <p id="employee-count">Loading employees…</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Department</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="employee-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- DEPARTMENTS -->
+          <section class="tab-panel" id="panel-departments" data-panel="departments" hidden>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Departments and shifts</h2>
+                  <p>
+                    Give each department its own check-in start, expected finish, grace period, and
+                    evening rule. Employees without a department use the default schedule and earn
+                    overtime after it finishes.
+                  </p>
+                </div>
+              </div>
+              <form id="department-form" class="toolbar">
+                <label class="field field--inline field--grow">
+                  <span>Department name</span>
+                  <input type="text" id="department-name" maxlength="120" required placeholder="e.g. Production" />
+                </label>
+                <label class="field field--inline">
+                  <span>Shift start</span>
+                  <input type="time" id="department-start" required />
+                </label>
+                <label class="field field--inline">
+                  <span>Shift end</span>
+                  <input type="time" id="department-end" required />
+                </label>
+                <label class="field field--inline">
+                  <span>Grace (min)</span>
+                  <input type="number" id="department-grace" min="0" max="240" step="1" required />
+                </label>
+                <label class="check-field check-field--toolbar">
+                  <input type="checkbox" id="department-night" />
+                  <span>Night Body Wash eligible</span>
+                </label>
+                <button type="submit" class="btn btn--primary">Add department</button>
+              </form>
+              <p class="fineprint">
+                Default schedule: <span id="default-schedule">—</span>. Late is calculated from the
+                employee's department shift start plus its grace period. Eligible departments count
+                evening time as Night Body Wash hours; all other departments count time after their
+                scheduled finish as overtime.
+              </p>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Departments</h2>
+                  <p id="department-count">Loading departments…</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Department</th>
+                      <th>Shift</th>
+                      <th>Grace</th>
+                      <th>Evening rule</th>
+                      <th>Employees</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="department-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- Edit employee dialog -->
+    <dialog class="dialog" id="edit-employee-dialog">
+      <form id="edit-employee-form" class="dialog-form">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Team member</p>
+            <h2>Edit employee</h2>
+          </div>
+          <button type="button" class="icon-btn" data-close-dialog="edit-employee-dialog" aria-label="Close">×</button>
+        </div>
+        <p class="field-readonly" id="edit-employee-email">—</p>
+        <label class="field">
+          <span>Full name</span>
+          <input type="text" id="edit-employee-name" maxlength="255" required />
+        </label>
+        <label class="field">
+          <span>Department</span>
+          <select id="edit-employee-department">
+            <option value="">No department (default shift)</option>
+          </select>
+        </label>
+        <label class="check-field">
+          <input type="checkbox" id="edit-employee-active" />
+          <span>Active — allowed to check in</span>
+        </label>
+        <p class="form-error" id="edit-employee-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn--ghost" data-close-dialog="edit-employee-dialog">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="edit-employee-save">Save changes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Edit department dialog -->
+    <dialog class="dialog" id="edit-department-dialog">
+      <form id="edit-department-form" class="dialog-form">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Schedule</p>
+            <h2>Edit department</h2>
+          </div>
+          <button type="button" class="icon-btn" data-close-dialog="edit-department-dialog" aria-label="Close">×</button>
+        </div>
+        <label class="field">
+          <span>Department name</span>
+          <input type="text" id="edit-department-name" maxlength="120" required />
+        </label>
+        <label class="field">
+          <span>Shift start</span>
+          <input type="time" id="edit-department-start" required />
+        </label>
+        <label class="field">
+          <span>Shift end</span>
+          <input type="time" id="edit-department-end" required />
+        </label>
+        <label class="field">
+          <span>Grace period (minutes)</span>
+          <input type="number" id="edit-department-grace" min="0" max="240" step="1" required />
+        </label>
+        <label class="check-field">
+          <input type="checkbox" id="edit-department-night" />
+          <span>Night Body Wash eligible — otherwise evening time is overtime</span>
+        </label>
+        <p class="form-error" id="edit-department-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn--ghost" data-close-dialog="edit-department-dialog">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="edit-department-save">Save changes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Fix missing checkout dialog -->
+    <dialog class="dialog" id="fix-dialog">
+      <form id="fix-form" class="dialog-form">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Missing check-out</p>
+            <h2>Close open shift</h2>
+          </div>
+          <button type="button" class="icon-btn" data-close-dialog="fix-dialog" aria-label="Close">×</button>
+        </div>
+        <p class="muted" id="fix-description">—</p>
+        <label class="field">
+          <span>Check-out time (office time)</span>
+          <input type="time" id="fix-time" required />
+        </label>
+        <p class="form-error" id="fix-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn--ghost" data-close-dialog="fix-dialog">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="fix-save">Save check-out</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="admin-toast" role="alert" hidden></div>
+
+    <script src="/admin.js" defer></script>
+  </body>
+</html>

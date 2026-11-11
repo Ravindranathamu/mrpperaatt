@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite database and backups
+data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+
+# Generated QR artwork
+qr/
+
+# Logs and OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="description" content="Scan the office QR code and tap once to record your attendance." />
+    <title>Office Attendance</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="employee-body">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="page-aurora" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Office attendance home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="8.25"></circle>
+            <path d="M12 7.75V12l2.9 1.85"></path>
+          </svg>
+        </span>
+        <span class="brand-name" id="company-name">Office Attendance</span>
+      </a>
+      <span class="tz-pill" id="tz-pill">Loading…</span>
+    </header>
+
+    <main id="main" class="employee-main">
+      <section class="employee-card" aria-live="polite">
+        <div id="loading-view" class="view">
+          <div class="spinner" aria-hidden="true"></div>
+          <p class="muted">Loading attendance…</p>
+        </div>
+
+        <div id="setup-view" class="view" hidden>
+          <div class="intro-icon intro-icon--warning" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M12 3.2 2.6 19.4a1.3 1.3 0 0 0 1.15 1.95h16.5a1.3 1.3 0 0 0 1.15-1.95Z"></path>
+              <path d="M12 9v4.3"></path>
+              <path d="M12 17.1h.01"></path>
+            </svg>
+          </div>
+          <p class="eyebrow">Setup needed</p>
+          <h1 id="setup-title">Almost ready</h1>
+          <p class="muted" id="setup-message">
+            Google sign-in is not configured yet. Add <code>GOOGLE_CLIENT_ID</code> to the server's
+            <code>.env</code> file and restart.
+          </p>
+          <a class="btn btn--primary btn--full" href="/admin">Open admin dashboard</a>
+          <p class="fineprint">
+            The README's Google Cloud Console step creates the client ID. Your administrator can
+            still add employees and review reports from the dashboard.
+          </p>
+        </div>
+
+        <div id="login-view" class="view" hidden>
+          <div class="intro-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.25"></circle>
+              <path d="M12 7.75V12l2.9 1.85"></path>
+            </svg>
+          </div>
+          <p class="eyebrow">Office attendance</p>
+          <h1>Scan. Tap. Done.</h1>
+          <p class="muted">
+            Sign in once with your work Google account. After that, checking in and out takes a
+            single tap.
+          </p>
+
+          <div id="google-button" class="google-button-wrap" aria-label="Sign in with Google"></div>
+          <p class="form-error" id="login-error" role="alert" hidden></p>
+          <noscript>
+            <p class="form-error">JavaScript is required to record attendance.</p>
+          </noscript>
+
+          <ol class="how-it-works">
+            <li><span>1</span><p>Scan the printed QR code at the office.</p></li>
+            <li><span>2</span><p>Allow <strong>precise location</strong> when your phone asks.</p></li>
+            <li><span>3</span><p>Tap once to check in. Tap again when you leave.</p></li>
+          </ol>
+
+          <p class="fineprint">
+            Use your phone's own camera app. Social-media or in-app scanners can block Google
+            sign-in and location access.
+          </p>
+        </div>
+
+        <div id="app-view" class="view" hidden>
+          <div class="greeting-row">
+            <div>
+              <p class="eyebrow">Welcome back</p>
+              <h1 id="employee-name">…</h1>
+            </div>
+            <button type="button" class="link-btn" id="signout-btn">Not you?</button>
+          </div>
+
+          <div class="clock-block">
+            <p class="clock-date" id="live-date">—</p>
+            <p class="clock-time" id="live-time">--:--</p>
+            <span class="clock-zone" id="clock-zone"></span>
+          </div>
+
+          <div class="status-row">
+            <span class="status-chip status-chip--neutral" id="status-chip">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="status-text">Checking status…</span>
+            </span>
+            <span class="holiday-pill" id="holiday-pill" hidden></span>
+            <span class="shift-pill" id="shift-pill" hidden></span>
+          </div>
+
+          <div class="punch-area">
+            <button type="button" class="punch-btn" id="punch-btn" disabled>
+              <span class="punch-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14"></path>
+                  <path d="m5 12 7 7 7-7"></path>
+                </svg>
+              </span>
+              <span id="punch-label">Loading…</span>
+            </button>
+            <p class="punch-hint" id="punch-hint">Your location is checked only when you tap.</p>
+          </div>
+
+          <div class="today-summary" id="today-summary" hidden></div>
+
+          <details class="history" id="history">
+            <summary>My recent attendance</summary>
+            <div id="history-list" class="history-list">
+              <p class="muted small">Loading…</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <p class="secure-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="5" y="10" width="14" height="10" rx="2.2"></rect>
+          <path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10"></path>
+        </svg>
+        Location is used only to verify you are at the office. The app stores the check-in/out
+        distance, not a location history.
+      </p>
+    </main>
+
+    <footer class="site-footer">
+      <span id="footer-company">Office Attendance</span>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <a href="/admin">Admin</a>
+      <span class="footer-copy" id="footer-copy"></span>
+    </footer>
+
+    <div class="overlay" id="overlay" hidden>
+      <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+        <div class="success-check" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m5 12.5 4.4 4.4L19 7.2"></path>
+          </svg>
+        </div>
+        <h2 id="overlay-title">Checked in</h2>
+        <p id="overlay-message"></p>
+        <button type="button" class="btn btn--primary btn--full" id="overlay-close">Done</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="alert" hidden></div>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
