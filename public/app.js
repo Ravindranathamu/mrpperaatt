@@ -293,8 +293,8 @@
       el['punch-label'].textContent = 'Tap to check out';
       el['punch-hint'].textContent =
         data.schedule && data.schedule.nightBodyWash
-          ? 'Take care — this records your finish time. If you are staying for Night Body Wash, do not check out until you leave.'
-          : 'Take care — this records your finish time.';
+          ? 'Take care — this records your finish time. You must be at the office to check out. If you are staying for Night Body Wash, do not check out until you leave.'
+          : 'Take care — this records your finish time. You must be at the office to check out.';
       renderSummary(record);
     } else {
       setStatusChip('done', 'Shift complete');

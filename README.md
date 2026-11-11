@@ -451,6 +451,7 @@ then regenerate the QR poster with the new URL.
 - [ ] Google sign-in works on a real phone.
 - [ ] Location permission is requested.
 - [ ] Check-in succeeds near the office and fails away from it.
+- [ ] Check-out succeeds near the office and fails away from it.
 - [ ] Check-out works.
 - [ ] The record appears in the admin **Today** board.
 - [ ] The monthly CSV downloads and opens in Excel.

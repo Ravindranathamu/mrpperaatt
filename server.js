@@ -524,6 +524,8 @@ app.post('/api/attendance/punch', punchLimiter, requireEmployee, async (req, res
   const { latitude, longitude, accuracy } = parseCoordinates(req.body);
   const distance = distanceMeters(latitude, longitude, config.officeLat, config.officeLng);
 
+  // This single gate protects both check-in and check-out. The action is only
+  // decided after the employee is confirmed to be inside the geofence.
   if (!Number.isFinite(distance)) {
     return res.status(400).json({ error: 'Could not read your location. Try again.' });
   }
