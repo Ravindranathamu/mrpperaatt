@@ -101,6 +101,42 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '32kb' }));
 
+// The schema and standard departments are created lazily on the first API
+// request. This keeps cold starts fast on serverless/scale-to-zero hosts and
+// makes sure every request sees a ready database. A successful initialization
+// is cached for the lifetime of the process; a failure is retried next time.
+let initializationPromise = null;
+
+async function initializeDatabase() {
+  await migrate(db);
+  const seededDepartments = await seedDefaultDepartments(db);
+  if (seededDepartments) {
+    console.log(`[attendance] Seeded ${seededDepartments} standard departments.`);
+  }
+  await syncDepartmentsFromEmployees();
+}
+
+function ensureInitialized() {
+  if (!initializationPromise) {
+    initializationPromise = initializeDatabase().catch((error) => {
+      initializationPromise = null;
+      throw error;
+    });
+  }
+  return initializationPromise;
+}
+
+app.use(async (req, res, next) => {
+  // The keep-awake probe must never wake Neon or wait for the schema.
+  if (!req.path.startsWith('/api/') || req.path === '/api/ping') return next();
+  try {
+    await ensureInitialized();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use(
   cookieSession({
     name: 'attendance_session',
@@ -464,8 +500,7 @@ app.get('/api/session', (req, res) => {
 
 // Lightweight liveness probe for external keep-awake monitors. It deliberately
 // does not touch the database: pinging /api/health every few minutes would keep
-// Neon awake around the clock and can exhaust the free compute hours. Render's
-// own deploy health check still uses /api/health below.
+// Neon awake around the clock and can exhaust the free compute hours.
 app.get('/api/ping', (req, res) => {
   res.json({ ok: true });
 });
@@ -1472,12 +1507,7 @@ async function syncDepartmentsFromEmployees() {
 }
 
 async function start() {
-  await migrate(db);
-  const seededDepartments = await seedDefaultDepartments(db);
-  if (seededDepartments) {
-    console.log(`[attendance] Seeded ${seededDepartments} standard departments.`);
-  }
-  await syncDepartmentsFromEmployees();
+  await ensureInitialized();
 
   const server = app.listen(config.port, () => {
     for (const warning of config.warnings) console.warn(`[attendance] WARNING: ${warning}`);
@@ -1520,4 +1550,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, start, config, db };
+module.exports = { app, start, ensureInitialized, config, db };

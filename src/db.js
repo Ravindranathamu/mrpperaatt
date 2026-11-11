@@ -8,8 +8,12 @@ const { DEFAULT_DEPARTMENTS } = require('./default-departments');
 function postgresConnection(config) {
   if (!config.databaseUrl) throw new Error('DATABASE_URL is required for PostgreSQL.');
   const url = new URL(config.databaseUrl);
+  // node-postgres does not understand libpq's sslmode/channel_binding query
+  // parameters. SSL is applied explicitly below, and channel binding is not
+  // supported by the pg driver, so strip both before connecting.
   url.searchParams.delete('sslmode');
   url.searchParams.delete('ssl');
+  url.searchParams.delete('channel_binding');
   const connection = { connectionString: url.toString() };
   if (config.databaseSsl) {
     connection.ssl = { rejectUnauthorized: true };

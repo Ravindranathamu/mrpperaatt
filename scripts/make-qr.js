@@ -8,7 +8,7 @@ const QRCode = require('qrcode');
 
 function usage() {
   console.log('');
-  console.log('Usage: npm run qr -- https://your-app.onrender.com "Main entrance"');
+  console.log('Usage: npm run qr -- https://your-site.netlify.app "Main entrance"');
   console.log('');
   console.log('The first argument is the URL embedded in the QR code.');
   console.log('The optional second argument labels where the poster will be hung.');

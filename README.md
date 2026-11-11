@@ -7,9 +7,10 @@ location, and tap **Check in** or **Check out**. A GPS geofence verifies they ar
 The admin dashboard shows live attendance, manages employees and holidays, and downloads a
 month-end attendance sheet that opens in Excel.
 
-No employee app to install. No monthly fee if you stay within the free tiers of Neon and Render.
-Render's free service sleeps after 15 idle minutes; Part 4.7 shows how to keep it awake with a free
-external monitor.
+No employee app to install. No monthly fee if you stay within the free tiers of Netlify and Neon.
+The production app runs as a long-lived process on Netlify Server; it scales to zero when idle and
+wakes on the next request. No credit card is required. The complete fresh-start guide is
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
@@ -39,8 +40,8 @@ external monitor.
 - **Raw data CSV** — one row per shift, including department shift, distance, late status, Night
   Body Wash hours, overtime hours, and approval status.
 - **Timezone-aware** — all dates, times, late calculations, and reports use your office timezone.
-- **Free production stack** — Render for the app and Neon for the database, both HTTPS and no card.
-  The `render.yaml` Blueprint creates the service in Singapore with one click.
+- **Free production stack** — Netlify Server for the app and Neon for the database, both HTTPS and
+  no card. `netlify.toml` and `netlify/server/index.mjs` are included.
 - **Secure by default** — server-side Google token verification, signed HttpOnly sessions,
   rate limits, origin checks, protected admin exports, and CSV formula-injection protection.
 
@@ -52,7 +53,7 @@ external monitor.
  Phone camera
       │  scans printed QR
       ▼
- https://your-app.onrender.com  ──►  Express app on Render
+ https://your-app.netlify.app  ──►  Express app on Netlify Server
       │                                   │
       │  Google ID token                  │  SQL over TLS
       ▼                                   ▼
@@ -85,6 +86,9 @@ external monitor.
 | Path | Purpose |
 | --- | --- |
 | `server.js` | Express app, API routes, auth, reports, startup |
+| `netlify.toml` | Netlify build, Node.js, region, headers, `/admin` rewrite |
+| `netlify/server/index.mjs` | Netlify Server entry point for the Express app |
+| `DEPLOYMENT.md` | Complete fresh deployment guide (OAuth → GitHub → Neon → Netlify) |
 | `src/config.js` | Environment parsing and production safety checks |
 | `src/db.js` | SQLite/PostgreSQL connection and automatic table creation |
 | `src/time.js` | Timezone, date, duration, and DST-safe conversion helpers |
@@ -106,11 +110,12 @@ external monitor.
 
 You need:
 
-- **Node.js 20 or newer** and npm.
+- **Node.js 22 or newer** and npm. Netlify Server runs the production app on Node.js 24.
 - A **Google account** for the admin, and Google accounts for employees. Google Workspace
   (company domain) is recommended so accounts can be restricted to your domain.
-- For production: free accounts at **[Neon](https://neon.tech)** and **[Render](https://render.com)**.
-- The **latitude and longitude of your office door** (see Part 4).
+- For production: free accounts at **[Neon](https://neon.tech)** and
+  **[Netlify](https://www.netlify.com/)**.
+- The **latitude and longitude of your office door** (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 This project is already built. You only need to supply the account-level credentials below;
 there is no app code to write.
@@ -253,7 +258,8 @@ or **Google Auth Platform**.
    http://localhost:3000
    ```
 
-   For production, you will add your Render URL later (Part 4.5).
+   For production, you will add your Netlify URL later (see Step 4.5 in
+   [DEPLOYMENT.md](DEPLOYMENT.md#45-authorize-the-production-url-in-google)).
 
 6. Leave **Authorized redirect URIs** empty. Click **Create**.
 7. Copy the **Client ID**. It looks like `1234567890-abc123.apps.googleusercontent.com`.
@@ -290,276 +296,92 @@ sign-in button instead of the setup card.
 
 ---
 
-## Part 3 — Production database (Neon PostgreSQL)
+## Part 3 — Deploy to Netlify + Neon (free, no card)
 
-Render's free web service has an **ephemeral filesystem**. A SQLite file would be erased on every
-deploy or restart. Production therefore uses a free Neon PostgreSQL database.
+> **Start here: [DEPLOYMENT.md](DEPLOYMENT.md).** It is the complete fresh-start guide. It begins
+> with the Google OAuth client and the empty GitHub repository, then covers Neon PostgreSQL,
+> Netlify, the production URL, and the QR poster.
 
-### 3.1 Create the Neon database
+Render is **not used** for this deployment because its signup currently asks for a credit card.
+The app now ships with a Netlify Server entry point. Netlify runs it as a long-lived Node.js
+process, so the Express app, its database pool, and signed-cookie sessions behave normally.
+There is no serverless adapter and no 15-minute sleep timer to keep alive.
 
-1. Sign up at <https://neon.tech>.
-2. Create a project. Choose the region closest to your Render region (for Sri Lanka, Singapore
-   is usually the closest available region on both services).
-3. In the project dashboard, open **Connect** / **Connection string**.
-4. Copy the PostgreSQL connection string. It looks like:
+### 3.1 The stack
 
-   ```
-   postgresql://USER:PASSWORD@ep-xxxx-pooler.region.aws.neon.tech/neondb?sslmode=require
-   ```
-
-5. Keep `?sslmode=require` (the app also sets SSL explicitly). The **pooled** host is fine and
-   recommended for a web service.
-
-### 3.2 Add it to the Render environment (not to `.env` in Git)
-
-You will paste this value into Render as `DATABASE_URL` in Part 4.3. The app creates the
-`employees`, `attendance`, and `holidays` tables automatically on first boot. There is no
-migration command to run.
-
-> Local SQLite data is **not** copied to Neon automatically. If you created test employees
-> locally, add them again in the production admin dashboard (or keep testing locally). Plan to
-> start production with a clean employee list.
-
----
-
-## Part 4 — Deploy to Render (free HTTPS)
-
-The app is a standard Node web service. Render supplies HTTPS automatically, which is required
-for both Google sign-in and browser geolocation.
-
-### 4.1 Put the project in a Git repository
-
-Render deploys from Git. If Git is not installed, install Git for Windows or use GitHub Desktop.
-From the project folder:
-
-```powershell
-git init
-git add .
-git commit -m "Initial attendance app"
-git branch -M main
-git remote add origin https://github.com/YOUR-USER/YOUR-REPO.git
-git push -u origin main
-```
-
-`.gitignore` already excludes `.env`, the local SQLite database, and generated QR artwork.
-**Never commit `.env`.** Verify with `git status` that `.env` is not listed.
-
-If you prefer not to use GitHub, Render can also deploy from GitLab or a public Git repository.
-The steps below are the same.
-
-### 4.2 Create the Render web service
-
-1. Sign up at <https://render.com> and connect your Git account.
-2. Click **New + → Web Service**.
-3. Select the repository.
-4. Configure:
-
-   | Setting | Value |
-   | --- | --- |
-   | Name | `attendance` (or anything you like) |
-   | Region | Closest to Neon, e.g. Singapore |
-   | Branch | `main` |
-   | Runtime | `Node` |
-   | Build command | `npm ci` |
-   | Start command | `npm start` |
-   | Instance type | `Free` |
-   | Health check path | `/api/health` |
-
-5. Do not add a persistent disk. The database lives in Neon.
-
-> **Faster option — Blueprint:** this repository includes `render.yaml`. In Render choose
-> **New + → Blueprint**, connect the repository, and click **Apply**. Render creates the same free
-> Singapore service with the build, start, health-check, region, and non-secret variables already
-> filled in. It prompts once for `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `ADMIN_PASSWORD`,
-> `OFFICE_LAT`, and `OFFICE_LNG`, and generates `SESSION_SECRET` automatically. If you use the
-> Blueprint, skip the manual settings above and continue at 4.4.
-
-### 4.3 Add environment variables
-
-If you created the service with the Blueprint, open **Environment** and verify the values below;
-the non-secret ones are already filled in. If you created the service manually, add every value.
-Do **not** set `PORT`; Render sets it automatically.
-
-| Variable | Production value |
-| --- | --- |
-| `NODE_ENV` | `production` |
-| `COMPANY_NAME` | Your company name |
-| `BRANCH_NAME` | Your branch name, e.g. `Peradeniya` (prefixes report filenames) |
-| `COPYRIGHT_NAME` | `RavSOFT` (copyright owner in footers and on the QR poster) |
-| `CONTACT_PHONE` | `+94755756803` |
-| `CONTACT_EMAIL` | `ravindranath@hotmail.co.uk` |
-| `TIMEZONE` | `Asia/Colombo` (or your IANA timezone) |
-| `GOOGLE_CLIENT_ID` | Your OAuth client ID |
-| `ADMIN_PASSWORD` | A long, unique password (10+ chars, not `admin12345`) |
-| `SESSION_SECRET` | 64 random hex characters from the command in 1.2 |
-| `DATABASE_URL` | Your Neon connection string |
-| `DATABASE_SSL` | `true` |
-| `OFFICE_LAT` | Office latitude, e.g. `6.9271` |
-| `OFFICE_LNG` | Office longitude, e.g. `79.8612` |
-| `ALLOWED_RADIUS_METERS` | `75` to start (50–150 is practical) |
-| `MAX_GPS_ACCURACY_METERS` | `250` |
-| `WORK_START` | `07:00` |
-| `WORK_END` | `16:00` |
-| `NIGHT_SHIFT_START` | `16:00` (fallback when no Night Body Wash department exists) |
-| `GRACE_MINUTES` | `10` |
-| `WORK_DAYS` | `1,2,3,4,5` (Monday=1, Sunday=7) |
-| `PUNCH_COOLDOWN_SECONDS` | `45` |
-| `OPEN_SHIFT_HOURS` | `20` |
-| `ALLOW_SELF_REGISTRATION` | `true` or `false` (see below) |
-| `ALLOWED_EMAIL_DOMAINS` | Your company domain, e.g. `mycompany.com` |
-
-Production safety checks: the app **refuses to start** if `ADMIN_PASSWORD` is missing, shorter
-than 10 characters, or a well-known value, or if `SESSION_SECRET` is missing, shorter than 32
-characters, or still a placeholder.
-
-Self-registration:
-
-- `ALLOW_SELF_REGISTRATION=true` + `ALLOWED_EMAIL_DOMAINS=mycompany.com` is the easiest setup:
-  the first Google sign-in creates the employee automatically, but only for your domain.
-- `ALLOW_SELF_REGISTRATION=false` is stricter: the admin must add every employee email first.
-- Leaving both open allows any Google user who scans the QR to self-register. The geofence still
-  applies, but set your domain in production.
-
-### 4.4 Deploy
-
-1. Click **Create Web Service** / **Deploy**.
-2. Watch **Logs**. A healthy boot ends with:
-
-   ```
-   [attendance] Your Company
-   [attendance] Listening on http://localhost:10000
-   [attendance] Database: PostgreSQL
-   ```
-
-   (Render may inject a different port; that is normal.)
-3. Open `https://YOUR-SERVICE.onrender.com/api/health`. It should return `{"ok":true}`.
-4. Open `https://YOUR-SERVICE.onrender.com/admin` and sign in with the production password.
-5. Open **Departments**. On a brand-new database the app seeds the nine standard departments on
-   first boot: **Service**, **Day Body Wash**, **Clean Park**, **Night Body Wash**, **Workshop 1**,
-   **Workshop 2**, **Paint A**, **Paint B**, and **Paint C**, with their default shifts and evening
-   rules. Adjust any times that differ at your branch. `npm run setup:departments` remains available
-   as a repair/reseed command.
-6. Add your real employees and assign their departments, or let domain-restricted
-   self-registration create them and assign departments afterwards.
-
-### 4.5 Authorize the Render URL in Google
-
-This step is easy to forget. Until it is done, the Google button fails with `origin_mismatch`.
-
-1. Google Cloud Console → **APIs & Services → Credentials** → your OAuth client.
-2. Add under **Authorized JavaScript origins**:
-
-   ```
-   https://YOUR-SERVICE.onrender.com
-   ```
-
-   Exact host, no trailing slash, no path.
-3. Save and wait a few minutes.
-4. Hard-refresh the employee page on your phone and test sign-in.
-
-If you later add a custom domain (for example `attendance.mycompany.com`), add that origin too,
-then regenerate the QR poster with the new URL.
-
-### 4.6 First production check
-
-- [ ] `/api/health` returns `{"ok":true}`.
-- [ ] Admin login works at `/admin`.
-- [ ] All nine standard departments exist with the right shifts and evening rules.
-- [ ] An employee is in the list (added manually or via self-registration) and has a department.
-- [ ] Google sign-in works on a real phone.
-- [ ] Location permission is requested.
-- [ ] Check-in succeeds near the office and fails away from it.
-- [ ] Check-out succeeds near the office and fails away from it.
-- [ ] Checking out away from the office closes the shift at its department shift end and shows
-      **Pending approval** in Reports.
-- [ ] The employee cannot check in again until the admin approves the pending row.
-- [ ] The admin can approve the saved time, and can also approve after editing the time.
-- [ ] The record appears in the admin **Today** board.
-- [ ] The monthly CSV downloads and opens in Excel.
-- [ ] The Excel download opens with Night Body Wash cells highlighted yellow and pending cells red.
-- [ ] The raw CSV includes the **Approval** column and no email addresses.
-- [ ] The QR link points to the real HTTPS URL, not `localhost`.
-
-### 4.7 Keep the free service awake (important)
-
-Render free web services spin down after **15 minutes without inbound traffic** and take about
-a minute to wake. A printed QR at the entrance cannot wait a minute, so keep the service awake
-with a free external monitor:
-
-1. Create a free account at <https://uptimerobot.com> (no card required).
-2. Choose **Add New Monitor → HTTP(s)**.
-3. URL: `https://YOUR-SERVICE.onrender.com/api/ping`
-4. Interval: **5 minutes**. Add your email as the alert contact.
-5. Save. The monitor's request counts as inbound traffic, so Render stays awake.
-
-> Use `/api/ping`, not `/api/health`. `/api/health` queries Neon; a 5-minute ping would keep
-> Neon awake around the clock and can exhaust its **100 CU-hour** monthly free allowance.
-> `/api/ping` answers without touching the database, so Neon can scale to zero between real
-> punches. Render's own deploy health check still uses `/api/health`, which is fine because it
-> runs only during a deploy.
-
-Free alternative: <https://cron-job.org> — create a job for the same URL every 5 minutes.
-
-Render gives **750 free instance hours per workspace per calendar month**. A 31-day month is 744
-hours, so one always-awake service just fits. Keep exactly one free service in the workspace. If
-Render shows usage approaching 750 hours, restrict the monitor to 05:00–22:30 Asia/Colombo
-(about 540 hours/month) so the app sleeps overnight.
-
-Caveats: the free plan is officially for testing/hobby use, has no uptime SLA, and may restart
-during deploys or maintenance. Signed-cookie sessions and Neon data survive restarts, but an
-in-flight request can fail. For guaranteed production uptime, use a paid instance or an
-always-on office PC. Do not rely on Render's local disk.
-
-### 4.8 Updating the app
-
-Push changes to the connected branch. Render rebuilds automatically:
-
-```powershell
-git add .
-git commit -m "Describe the change"
-git push
-```
-
-Environment-variable changes trigger a restart. Changing `SESSION_SECRET` signs everyone out.
-Changing `ADMIN_PASSWORD` changes future logins; existing admin sessions last up to 12 hours.
-To force an immediate admin logout, also change `SESSION_SECRET`.
-
-### 4.8a Save the deployment details locally
-
-The repository ignores `deployment.local.md`. Fill it in with the Render dashboard link, the
-production URL, the Neon project/region, the Google client ID, and the last deployed commit.
-Do not write the Neon password, `SESSION_SECRET`, or `ADMIN_PASSWORD` there. Future changes are
-then: edit locally → `npm test` → commit → push; Render redeploys automatically.
-
-### 4.9 Hosting reality check — why not Back4App free?
-
-Back4App Containers still advertises a free plan, but since 15 September 2026 the free plan's
-`*.b4a.run` address is **temporary and expires 60 minutes after each deployment**, and push
-auto-deploy is a paid feature. That makes it unusable for a printed QR poster.
-
-Other no-card options checked in November 2026:
-
-| Host | Free no-card web service? | Catch |
+| Piece | Service | Card required? |
 | --- | --- | --- |
-| Render | Yes | Sleeps after 15 min; use the keep-awake monitor in 4.7 |
-| Back4App Containers | Yes, but the URL expires | 60-minute URL; no push auto-deploy on free |
-| Alwaysdata | Yes | Free plan is personal-use only; for-profit/services prohibited |
-| Koyeb | No free compute | Paid plans start at $29/month |
-| Zeabur | Dashboard only | No free compute |
-| Fly.io, Railway | No | Card required |
+| App server + HTTPS | Netlify Server, Free plan | No |
+| PostgreSQL | Neon Free, Frankfurt (`eu-central-1`) | No |
+| Sign-in | Google Identity Services | No |
 
-If Render ever asks for a card, the honest choices are a small paid plan (about $5–7/month) or
-running the app on an always-on office PC and publishing it through a tunnel. A tunnel needs a
-stable HTTPS address; Tailscale Funnel gives a `https://....ts.net` URL but its Personal plan is
-not intended for commercial use. For a business, a paid host is the reliable answer.
+Netlify Server is in Early Access and is free during that period. The free plan runs one small
+server instance; it scales to zero after about five minutes without requests and starts again on
+the next request. Neon also scales to zero. The first request after a quiet period can therefore
+take a few seconds.
+
+### 3.2 What is already configured
+
+- `netlify.toml` — build command, publish directory, Node.js 24, Frankfurt region, security
+  headers, the `/admin` rewrite, and `includedFiles` so the server bundle ships `node_modules`.
+- `netlify/server/index.mjs` — wraps the existing Express app in a Node HTTP server.
+- `server.js` — creates the schema and seeds the nine standard departments on the first API
+  request. `/api/ping` deliberately skips the database.
+- `src/db.js` — strips Neon's `sslmode` and `channel_binding` parameters, which `node-postgres`
+  does not understand.
+
+### 3.3 Required production values
+
+Create a Neon project in **AWS Europe (Frankfurt)** and copy its **pooled** connection string.
+Then enter these in Netlify under **Project configuration → Environment variables**:
+
+```text
+NODE_ENV=production
+COMPANY_NAME=Mr Paint Srilanka
+BRANCH_NAME=Peradeniya
+TIMEZONE=Asia/Colombo
+GOOGLE_CLIENT_ID=...
+ADMIN_PASSWORD=...
+SESSION_SECRET=...
+DATABASE_URL=postgresql://...-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+DATABASE_SSL=true
+OFFICE_LAT=...
+OFFICE_LNG=...
+ALLOWED_RADIUS_METERS=75
+MAX_GPS_ACCURACY_METERS=250
+ALLOW_SELF_REGISTRATION=false
+```
+
+The full table, including branding, shift, overtime, and report settings, is in
+[DEPLOYMENT.md](DEPLOYMENT.md#43-add-environment-variables).
+
+Generate `SESSION_SECRET` with:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Do not set `PORT`; Netlify supplies it. Never commit `.env` or paste `DATABASE_URL`,
+`ADMIN_PASSWORD`, or `SESSION_SECRET` into a public place.
+
+### 3.4 After the first deploy
+
+1. Add the exact `https://YOUR-SITE.netlify.app` origin to the Google OAuth client.
+2. Open `/api/health`; the first call creates the tables and seeds the nine departments.
+3. Open `/admin`, sign in, add employees, and verify the shift times.
+4. Run the acceptance checks in [DEPLOYMENT.md](DEPLOYMENT.md#step-5--first-run-setup-and-acceptance-test).
+5. Generate the QR poster only after the final URL is known.
+
+No keep-awake monitor is needed. Do not continuously ping `/api/health`, because that keeps Neon
+awake. `/api/ping` exists for a database-free liveness check if one is ever required.
 
 ---
 
-## Part 5 — Print the QR poster
+## Part 4 — Print the QR poster
 
 Generate the poster **after** you know the final HTTPS URL.
 
-### 5.1 Generate the artwork
+### 4.1 Generate the artwork
 
 ```powershell
 npm run qr -- https://YOUR-APP-URL "Main entrance"
@@ -579,7 +401,7 @@ qr/README.txt                 Plain-text record of URL and label
 To make posters for several entrances, run the command again with a different label and copy
 the folder after each run. All posters can point to the same URL.
 
-### 5.2 Print it
+### 4.2 Print it
 
 1. Open `qr/attendance-poster.html` in Chrome or Edge.
 2. Print (`Ctrl+P`).
@@ -591,7 +413,7 @@ the folder after each run. All posters can point to the same URL.
 4. Print on thick paper or card and laminate it.
 5. Test the printed code with an iPhone and an Android phone before printing for every entrance.
 
-### 5.3 Place it well
+### 4.3 Place it well
 
 - Eye level, flat, well lit, near the entrance or lift lobby.
 - Avoid glass reflections, direct sunlight, and curved surfaces.
@@ -602,9 +424,9 @@ the folder after each run. All posters can point to the same URL.
 
 ---
 
-## Part 6 — Admin guide
+## Part 5 — Admin guide
 
-Open `https://YOUR-SERVICE.onrender.com/admin`.
+Open `https://YOUR-SITE.netlify.app/admin`.
 
 ### Today
 
@@ -775,7 +597,7 @@ before finalising payroll.
 
 ---
 
-## Part 7 — Instructions for employees
+## Part 6 — Instructions for employees
 
 Copy this into WhatsApp, email, or a noticeboard:
 
@@ -831,12 +653,12 @@ Device notes:
 
 ## Configuration reference
 
-All values go in `.env` locally or in Render's **Environment** page in production.
+All values go in `.env` locally or in Netlify's **Environment variables** page in production.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `NODE_ENV` | `development` | Set `production` on Render for secure cookies and strict checks |
-| `PORT` | `3000` | Render sets this automatically; do not override it there |
+| `NODE_ENV` | `development` | Set `production` on Netlify for secure cookies and strict checks |
+| `PORT` | `3000` | Local default; Netlify sets it automatically, so do not override it there |
 | `COMPANY_NAME` | `My Company` | Shown in the app and on posters |
 | `BRANCH_NAME` | empty | Prefix for downloaded reports, e.g. `Peradeniya` produces `Peradeniya_attendance_...csv` and `.xlsx` |
 | `COPYRIGHT_NAME` | `COMPANY_NAME` | Copyright owner shown in footers and on the QR poster |
@@ -909,7 +731,7 @@ Recommended production settings:
   self-registration and pre-add everyone.
 - A unique 16+ character admin password stored in a password manager.
 - A unique `SESSION_SECRET`.
-- HTTPS only (Render provides it).
+- HTTPS only (Netlify provides it).
 - Download a monthly CSV and keep it somewhere safe.
 
 ---
@@ -924,7 +746,7 @@ Recommended production settings:
 | "Access blocked" / app not verified | External app is in Testing and the user is not a test user. Add them, or publish the app; Internal Workspace apps avoid this. |
 | "Use your company Google account" | `ALLOWED_EMAIL_DOMAINS` does not include the signed-in email's domain. |
 | "Your email is not on the employee list" | Self-registration is off and the admin has not added that email. |
-| "Location permission was denied" | Allow location for the site, enable Precise Location, then reload. See Part 7 device notes. |
+| "Location permission was denied" | Allow location for the site, enable Precise Location, then reload. See Part 6 device notes. |
 | "You must be at the office… Xm away" | Wrong `OFFICE_LAT`/`OFFICE_LNG`, or you are genuinely outside the radius. Test with a maps app at the door. |
 | "Location accuracy is too low" | Move near a window/outside, wait for GPS, enable Wi-Fi scanning, disable VPN, retry. Or raise `MAX_GPS_ACCURACY_METERS` carefully. |
 | "Please wait N seconds before checking out" | `PUNCH_COOLDOWN_SECONDS` cooldown after check-in. Wait and retry. |
@@ -936,15 +758,17 @@ Recommended production settings:
 | Pending row is red in Excel | It is still awaiting approval. Approve it in Reports, then download again for payroll. |
 | Admin password rejected | Check `ADMIN_PASSWORD` in the running environment. Changing `.env` requires a restart. Rate limit after 10 failures: wait 15 minutes. |
 | 429 "Too many attempts" | Rate limiting. Wait, then retry. |
-| Render page takes ~1 minute to load | Free service was asleep. Set up the 5-minute keep-awake monitor in Part 4.7. |
-| Render deploy fails on `better-sqlite3` | Local Node version mismatch or missing build tools. Production uses Postgres, but the package still installs. Set a supported Node version and redeploy; check Render build logs. |
+| Netlify page takes a few seconds to load | Netlify Server or Neon was asleep. This is normal on the free plan; retry. No keep-awake monitor is needed. |
+| Netlify build fails on `better-sqlite3` | The package ships prebuilt Linux binaries and needs no install script. Confirm `netlify.toml` still uses `npm ci --ignore-scripts`, `NODE_VERSION = "24"`, then clear the build cache and redeploy. |
+| Netlify build cannot find the server | The entry must be exactly `netlify/server/index.mjs` and Node.js must be 24. Confirm both are committed and redeploy. |
+| `502` on every Netlify request | A required environment variable is missing or invalid. Check the server logs; `ADMIN_PASSWORD`, `SESSION_SECRET`, and `DATABASE_URL` are mandatory. |
 | App crashes at boot in production | Read the log: usually a weak/missing `ADMIN_PASSWORD` or `SESSION_SECRET`, invalid timezone, or bad `DATABASE_URL`. |
 | `{"ok":false}` from `/api/health` | Database connection problem. Check `DATABASE_URL`, Neon project status, and SSL settings. |
 | Timezone looks wrong | Set `TIMEZONE` to the correct IANA name and restart. Phones may show their own local time; reports use the server setting. |
 | CSV opens as one column / garbled | Use Excel's **Data → From Text/CSV**, comma delimiter, UTF-8. The file includes a BOM for direct opening. |
 | QR camera does not open the link | Print larger/clearer, improve lighting, avoid reflections, test at 100% scale. Use the phone's own camera app. |
 | Printed QR still points to localhost | Regenerate with the final HTTPS URL: `npm run qr -- https://... "Main entrance"`. |
-| Lost admin password | Change `ADMIN_PASSWORD` in Render and restart. Change `SESSION_SECRET` too to invalidate old sessions. |
+| Lost admin password | Change `ADMIN_PASSWORD` in Netlify, redeploy, then change `SESSION_SECRET` to invalidate old sessions. |
 | Employee left the company | Deactivate them under **Employees**; their historical records remain in reports. |
 
 ---
@@ -989,7 +813,8 @@ The app has also been exercised end-to-end locally: admin password login, employ
 holiday creation, geofenced check-in/out with a mocked location, live board, date-range reports,
 department/employee report filters, both filtered CSV downloads, the highlighted Excel download, the
 Night Body Wash and overtime preview columns, branch-prefixed filenames, and the copyright footer. A full real-Google sign-in
-requires your OAuth client ID and is covered by the Part 2 / 4.6 checklist.
+requires your OAuth client ID and is covered by the Part 2 and
+[DEPLOYMENT.md](DEPLOYMENT.md#step-5--first-run-setup-and-acceptance-test) checklists.
 
 ---
 

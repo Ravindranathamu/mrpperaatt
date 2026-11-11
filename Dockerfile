@@ -1,14 +1,11 @@
-FROM node:22-bookworm-slim AS deps
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
+FROM node:24-bookworm-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund
+# better-sqlite3 includes prebuilt Linux binaries, so no compiler is needed.
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 ENV NODE_ENV=production
 WORKDIR /app

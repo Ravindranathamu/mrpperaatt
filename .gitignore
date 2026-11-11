@@ -9,6 +9,9 @@ node_modules/
 # Local production deployment notes (URLs, project IDs, last commit)
 deployment.local.md
 
+# Netlify CLI local state
+.netlify/
+
 # Local SQLite database and backups
 data/
 *.db

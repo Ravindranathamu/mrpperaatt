@@ -1,0 +1,50 @@
+# Netlify configuration for the Mr Paint Srilanka attendance app.
+#
+# This project uses Netlify Server (long-lived Node.js process) plus Neon
+# PostgreSQL. Both free tiers work without a credit card.
+#
+# Netlify Server requires Node.js 24 or newer.
+
+[build]
+  # better-sqlite3 ships prebuilt binaries for every supported platform and
+  # does not need an install script. --ignore-scripts stops npm 11's `npm ci`
+  # from unnecessarily trying to run node-gyp for it on Netlify's Linux image.
+  command = "npm ci --ignore-scripts"
+  publish = "public"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+[server]
+  # Netlify Server supports cmh (Ohio) and fra (Frankfurt). Keep the Neon
+  # database in the same region for the best response time.
+  region = "fra"
+  # Netlify's server bundler leaves npm packages external, so ship the
+  # production node_modules with the server archive. Without this, the
+  # deployed server cannot resolve express, knex, pg, and the rest.
+  includedFiles = ["node_modules/**"]
+
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(self), camera=(), microphone=()"
+    Strict-Transport-Security = "max-age=15552000; includeSubDomains"
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://accounts.google.com https://www.gstatic.com https://www.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; frame-src https://accounts.google.com https://www.google.com; connect-src 'self' https://accounts.google.com; img-src 'self' data: https://*.googleusercontent.com; font-src 'self'"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/admin.html"
+  [headers.values]
+    Cache-Control = "no-store"
