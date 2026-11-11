@@ -104,7 +104,7 @@ accounts; the older name is **OAuth consent screen**. The values are the same.
 For this deployment, the new client ID is:
 
 ```text
-603722643576-0nqut2msb9abfqf3p00koiable9etjq6.apps.googleusercontent.com
+603722643576-kocmg8p8gdaiiv4cnj3p9b626s8uu2bs.apps.googleusercontent.com
 ```
 
 Use that exact value as `GOOGLE_CLIENT_ID` in Netlify and in your local `.env`.
